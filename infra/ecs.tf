@@ -1,19 +1,15 @@
 module "ecs" {
-  source = "terraform-aws-modules/ecs/aws"
+  source  = "terraform-aws-modules/ecs/aws"
+  version = "~> 6.0"
 
   cluster_name = "${local.name}-cluster"
 
-  # Capacity provider - Fargate is serverless and easiest to manage
-  fargate_capacity_providers = {
+  default_capacity_provider_strategy = {
     FARGATE = {
-      default_capacity_provider_strategy = {
-        weight = 100
-      }
+      weight = 100
     }
     FARGATE_SPOT = {
-      default_capacity_provider_strategy = {
-        weight = 0
-      }
+      weight = 0
     }
   }
 
