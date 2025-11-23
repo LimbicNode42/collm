@@ -5,7 +5,7 @@ terraform {
       version = "~> 6.0"
     }
   }
-  
+
   # Remote state in S3 with DynamoDB locking
   backend "s3" {
     bucket         = "collm-terraform-state-prod-001"
