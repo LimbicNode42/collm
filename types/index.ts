@@ -1,0 +1,51 @@
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Node {
+  id: string;
+  topic: string;
+  description?: string;
+  state: string; // Serialized LLM state or summary
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export enum MessageStatus {
+  PENDING = 'PENDING',
+  ADJUDICATING = 'ADJUDICATING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  STALE = 'STALE',
+}
+
+export interface Message {
+  id: string;
+  content: string;
+  userId: string;
+  nodeId: string;
+  targetNodeVersion: number;
+  status: MessageStatus;
+  createdAt: Date;
+}
+
+export interface AdjudicationResult {
+  messageId: string;
+  isRelevant: boolean;
+  isStale: boolean;
+  reason?: string;
+  score: number; // 0 to 1 confidence score
+}
+
+export interface QueueMessage {
+  messageId: string;
+  nodeId: string;
+  targetNodeVersion: number;
+  content: string;
+  timestamp: number;
+}
