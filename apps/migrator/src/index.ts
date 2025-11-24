@@ -9,6 +9,7 @@ async function createDatabaseIfNotExists(connectionString: string) {
   
   // Connect to 'postgres' database to create new DBs
   url.pathname = '/postgres';
+  url.search = ''; // Remove query params like sslmode=require to avoid conflict with manual ssl config
   const adminConnectionString = url.toString();
 
   const client = new Client({ 
