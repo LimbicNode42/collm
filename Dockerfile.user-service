@@ -12,6 +12,9 @@ RUN npm install
 WORKDIR /app/packages/database
 RUN npm run generate
 RUN npm run build
+# Build types
+WORKDIR /app/packages/types
+RUN npm run build
 # Build user service
 WORKDIR /app/apps/user-service
 RUN npm run build
