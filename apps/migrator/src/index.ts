@@ -11,7 +11,10 @@ async function createDatabaseIfNotExists(connectionString: string) {
   url.pathname = '/postgres';
   const adminConnectionString = url.toString();
 
-  const client = new Client({ connectionString: adminConnectionString });
+  const client = new Client({ 
+    connectionString: adminConnectionString,
+    ssl: { rejectUnauthorized: false }
+  });
   
   try {
     await client.connect();

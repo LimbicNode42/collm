@@ -1,8 +1,10 @@
 {
   "name": "@collm/database",
   "version": "0.0.1",
-  "main": "src/client.ts",
+  "main": "dist/client.js",
+  "types": "dist/client.d.ts",
   "scripts": {
+    "build": "tsc",
     "generate": "prisma generate --schema=./prisma/user.prisma && prisma generate --schema=./prisma/core.prisma"
   },
   "dependencies": {

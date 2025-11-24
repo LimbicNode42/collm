@@ -193,7 +193,7 @@ resource "aws_ecs_task_definition" "message_service" {
         },
         {
           name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core"
+          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core?sslmode=require"
         },
         {
           name  = "AWS_REGION"
@@ -252,7 +252,7 @@ resource "aws_ecs_task_definition" "user_service" {
       environment = [
         {
           name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_users"
+          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_users?sslmode=require"
         }
       ]
       logConfiguration = {
@@ -305,7 +305,7 @@ resource "aws_ecs_task_definition" "core_service" {
         },
         {
           name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core"
+          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core?sslmode=require"
         },
         {
           name  = "AWS_REGION"
@@ -358,11 +358,11 @@ resource "aws_ecs_task_definition" "migrator" {
       environment = [
         {
           name  = "DATABASE_URL_USER"
-          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_users"
+          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_users?sslmode=require"
         },
         {
           name  = "DATABASE_URL_CORE"
-          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core"
+          value = "postgresql://${module.db.db_instance_username}:${var.db_password}@${module.db.db_instance_endpoint}/collm_core?sslmode=require"
         }
       ]
       logConfiguration = {

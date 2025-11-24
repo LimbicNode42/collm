@@ -11,6 +11,7 @@ RUN npm install
 # Generate Prisma Client
 WORKDIR /app/packages/database
 RUN npm run generate
+RUN npm run build
 # Build core service
 WORKDIR /app/apps/core-service
 RUN npm run build
