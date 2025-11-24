@@ -1,0 +1,26 @@
+FROM node:20-slim AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+# Install OpenSSL for Prisma
+RUN apt-get update -y && apt-get install -y openssl
+
+FROM base AS builder
+WORKDIR /app
+COPY . .
+# Install dependencies for all workspaces
+RUN npm install
+# Generate Prisma Client
+WORKDIR /app/packages/database
+RUN npx prisma generate --schema=./prisma/user.prisma
+RUN npx prisma generate --schema=./prisma/core.prisma
+
+FROM base AS runner
+WORKDIR /app
+# Copy necessary files
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/migrator ./apps/migrator
+
+WORKDIR /app/apps/migrator
+CMD ["npm", "start"]

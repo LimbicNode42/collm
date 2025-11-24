@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  output   = "../generated/core-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_CORE")
+  extensions = [vector]
+}
+
+model Node {
+  id          String   @id @default(cuid())
+  topic       String
+  description String?
+  state       String   @db.Text
+  embedding   Unsupported("vector(1536)")?
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    Message[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  
+  userId    String
+  // User relation removed as it's in a different DB. We just store the ID.
+  
+  nodeId    String
+  node      Node     @relation(fields: [nodeId], references: [id])
+  
+  targetNodeVersion Int
+
+  status    String   @default("PENDING")
+}

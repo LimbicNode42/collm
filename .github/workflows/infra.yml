@@ -1,7 +1,13 @@
-name: Infrastructure
+name: Infrastructure & Deploy
 
 on:
+  push:
+    branches: [ master ]
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   opentofu:
@@ -10,11 +16,9 @@ jobs:
     defaults:
       run:
         working-directory: ./infra
-
-    permissions:
-      id-token: write
-      contents: read
-
+    outputs:
+      private_subnets: ${{ steps.tf-outputs.outputs.private_subnets }}
+      security_group_id: ${{ steps.tf-outputs.outputs.security_group_id }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -35,8 +39,102 @@ jobs:
       run: tofu fmt -check
 
     - name: OpenTofu Plan
+      env:
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
       run: tofu plan -input=false
 
     - name: OpenTofu Apply
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      if: github.ref == 'refs/heads/master'
+      env:
+        TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
       run: tofu apply -auto-approve -input=false
+
+    - name: Export Terraform Outputs
+      id: tf-outputs
+      if: github.ref == 'refs/heads/master'
+      run: |
+        echo "private_subnets=$(tofu output -json private_subnets | jq -r 'join(",")')" >> $GITHUB_OUTPUT
+        echo "security_group_id=$(tofu output -raw ecs_tasks_security_group_id)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: opentofu
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: message-service
+            dockerfile: Dockerfile.message-service
+            repo: collm-message-service
+          - name: user-service
+            dockerfile: Dockerfile.user-service
+            repo: collm-user-service
+          - name: core-service
+            dockerfile: Dockerfile.core-service
+            repo: collm-core-service
+          - name: migrator
+            dockerfile: Dockerfile.migrator
+            repo: collm-migrator
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push ${{ matrix.service.name }}
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ matrix.service.repo }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -f ${{ matrix.service.dockerfile }} -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  migrate:
+    needs: [opentofu, build]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Run Database Migrations
+      env:
+        SUBNETS: ${{ needs.opentofu.outputs.private_subnets }}
+        SECURITY_GROUP: ${{ needs.opentofu.outputs.security_group_id }}
+      run: |
+        aws ecs run-task \
+          --cluster collm-cluster \
+          --task-definition collm-migrator \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}"
+
+  deploy:
+    needs: migrate
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Force ECS Deployment
+      run: |
+        aws ecs update-service --cluster collm-cluster --service collm-message-service --force-new-deployment
+        aws ecs update-service --cluster collm-cluster --service collm-user-service --force-new-deployment
+        aws ecs update-service --cluster collm-cluster --service collm-core-service --force-new-deployment

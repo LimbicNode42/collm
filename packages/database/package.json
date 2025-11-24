@@ -1,0 +1,14 @@
+{
+  "name": "@collm/database",
+  "version": "0.0.1",
+  "main": "src/client.ts",
+  "scripts": {
+    "generate": "prisma generate --schema=./prisma/user.prisma && prisma generate --schema=./prisma/core.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

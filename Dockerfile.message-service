@@ -1,0 +1,28 @@
+FROM node:20-slim AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+FROM base AS builder
+WORKDIR /app
+COPY . .
+# Install dependencies for all workspaces
+RUN npm install
+# Generate Prisma Client
+WORKDIR /app/packages/database
+RUN npx prisma generate
+# Build message service
+WORKDIR /app/apps/message-service
+RUN npm run build
+
+FROM base AS runner
+WORKDIR /app
+# Copy necessary files
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/message-service/dist ./apps/message-service/dist
+COPY --from=builder /app/apps/message-service/package.json ./apps/message-service/package.json
+
+WORKDIR /app/apps/message-service
+EXPOSE 3001
+CMD ["node", "dist/index.js"]
