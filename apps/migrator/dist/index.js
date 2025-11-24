@@ -8,9 +8,15 @@ async function createDatabaseIfNotExists(connectionString) {
     const url = new URL(connectionString);
     const dbName = url.pathname.substring(1); // remove leading /
     // Connect to 'postgres' database to create new DBs
-    url.pathname = '/postgres';
-    const adminConnectionString = url.toString();
-    const client = new pg_1.Client({ connectionString: adminConnectionString });
+    // We extract credentials and host from the original URL
+    const client = new pg_1.Client({
+        user: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+        host: url.hostname,
+        port: parseInt(url.port) || 5432,
+        database: 'postgres',
+        ssl: { rejectUnauthorized: false }
+    });
     try {
         await client.connect();
         const res = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);

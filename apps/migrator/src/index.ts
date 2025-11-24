@@ -8,12 +8,14 @@ async function createDatabaseIfNotExists(connectionString: string) {
   const dbName = url.pathname.substring(1); // remove leading /
   
   // Connect to 'postgres' database to create new DBs
-  url.pathname = '/postgres';
-  url.search = ''; // Remove query params like sslmode=require to avoid conflict with manual ssl config
-  const adminConnectionString = url.toString();
-
+  // We extract credentials and host from the original URL
+  
   const client = new Client({ 
-    connectionString: adminConnectionString,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    host: url.hostname,
+    port: parseInt(url.port) || 5432,
+    database: 'postgres',
     ssl: { rejectUnauthorized: false }
   });
   

@@ -14,6 +14,7 @@ module "db" {
 
   db_name  = "collm"
   username = "collm_admin"
+  password = var.db_password
   port     = 5432
 
   # DB subnet group
