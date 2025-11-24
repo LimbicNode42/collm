@@ -10,7 +10,7 @@ COPY . .
 RUN npm install
 # Generate Prisma Client
 WORKDIR /app/packages/database
-RUN npx prisma generate
+RUN npm run generate
 # Build message service
 WORKDIR /app/apps/message-service
 RUN npm run build

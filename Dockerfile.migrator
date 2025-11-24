@@ -12,8 +12,7 @@ COPY . .
 RUN npm install
 # Generate Prisma Client
 WORKDIR /app/packages/database
-RUN npx prisma generate --schema=./prisma/user.prisma
-RUN npx prisma generate --schema=./prisma/core.prisma
+RUN npm run generate
 
 FROM base AS runner
 WORKDIR /app
