@@ -13,13 +13,17 @@ RUN npm install
 # Generate Prisma Client
 WORKDIR /app/packages/database
 RUN npm run generate
+# Build migrator
+WORKDIR /app/apps/migrator
+RUN npm run build
 
 FROM base AS runner
 WORKDIR /app
 # Copy necessary files
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/apps/migrator ./apps/migrator
+COPY --from=builder /app/apps/migrator/dist ./apps/migrator/dist
+COPY --from=builder /app/apps/migrator/package.json ./apps/migrator/package.json
 
 WORKDIR /app/apps/migrator
 CMD ["npm", "start"]

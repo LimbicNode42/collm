@@ -20,7 +20,7 @@ export interface ILLMService {
 }
 
 export class MockLLMService implements ILLMService {
-  async generateCompletion(prompt: string, systemPrompt?: string): Promise<LLMResponse> {
+  async generateCompletion(prompt: string, _systemPrompt?: string): Promise<LLMResponse> {
     console.log(`[LLMService] Generating completion for prompt: "${prompt.substring(0, 50)}..."`);
     return {
       content: "This is a mock LLM response. In a real implementation, this would be the output from OpenAI or Anthropic.",
