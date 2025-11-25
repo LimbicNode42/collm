@@ -16,6 +16,7 @@ const services = [
     cwd: path.join(__dirname, '../apps/user-service'),
     env: { 
       ...process.env, 
+      DATABASE_URL: dbUrl,
       DATABASE_URL_USER: dbUrl,
       JWT_SECRET: 'dev-secret-123'
     }

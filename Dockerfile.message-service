@@ -12,6 +12,8 @@ COPY . .
 RUN npm ci
 # Generate Prisma Client
 WORKDIR /app/packages/database
+# Switch to PostgreSQL for production build
+RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/g' prisma/user.prisma
 RUN npm run generate
 RUN npm run build
 # Build types
