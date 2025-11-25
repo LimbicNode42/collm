@@ -17,7 +17,7 @@ fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'supersecret',
 });
 
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async () => {
   return { status: 'ok' };
 });
 
