@@ -13,7 +13,9 @@ RUN npm install
 # Generate Prisma Client
 WORKDIR /app/packages/database
 # Switch to PostgreSQL for production build
-RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/g' prisma/user.prisma
+RUN sed -i 's/provider[[:space:]]*=[[:space:]]*"sqlite"/provider = "postgresql"/g' prisma/user.prisma
+# Verify the change
+RUN grep 'provider = "postgresql"' prisma/user.prisma || exit 1
 RUN npm run generate
 RUN npm run build
 # Build migrator
