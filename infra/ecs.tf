@@ -83,6 +83,28 @@ resource "aws_iam_role_policy" "ecs_task_sqs_policy" {
   })
 }
 
+# Allow Task to use SSM for ECS Exec
+resource "aws_iam_role_policy" "ecs_task_ssm_policy" {
+  name = "${local.name}-ecs-task-ssm-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Security Group for ECS Tasks
 resource "aws_security_group" "ecs_tasks" {
   name        = "${local.name}-ecs-tasks-sg"
@@ -299,11 +321,12 @@ resource "aws_ecs_task_definition" "user_service" {
 }
 
 resource "aws_ecs_service" "user_service" {
-  name            = "${local.name}-user-service"
-  cluster         = module.ecs.cluster_id
-  task_definition = aws_ecs_task_definition.user_service.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = "${local.name}-user-service"
+  cluster                = module.ecs.cluster_id
+  task_definition        = aws_ecs_task_definition.user_service.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     subnets          = module.vpc.private_subnets
