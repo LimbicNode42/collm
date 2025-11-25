@@ -277,7 +277,11 @@ resource "aws_ecs_task_definition" "user_service" {
       environment = [
         {
           name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
+          value = "postgresql://user_service_app:${urlencode(var.app_db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
+        },
+        {
+          name  = "DATABASE_URL_USER"
+          value = "postgresql://user_service_app:${urlencode(var.app_db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
         }
       ]
       logConfiguration = {
@@ -394,6 +398,10 @@ resource "aws_ecs_task_definition" "migrator" {
         {
           name  = "DATABASE_URL_CORE"
           value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+        },
+        {
+          name  = "APP_USER_PASSWORD"
+          value = var.app_db_password
         }
       ]
       logConfiguration = {

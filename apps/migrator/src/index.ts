@@ -75,6 +75,57 @@ async function runMigrations() {
   }
 
   console.log("All migrations applied successfully.");
+
+  await createUserAndGrantPermissions(userDbUrl, 'user_service_app', process.env.APP_USER_PASSWORD!);
+}
+
+async function createUserAndGrantPermissions(connectionString: string, username: string, password: string) {
+  if (!password) {
+    console.warn("APP_USER_PASSWORD not provided. Skipping app user creation.");
+    return;
+  }
+
+  const url = new URL(connectionString);
+  const dbName = url.pathname.substring(1);
+
+  const client = new Client({
+    connectionString,
+    ssl: { rejectUnauthorized: false }
+  });
+
+  try {
+    await client.connect();
+    console.log(`Configuring user ${username} for database ${dbName}...`);
+
+    // Check if user exists
+    const userRes = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = $1`, [username]);
+    
+    if (userRes.rowCount === 0) {
+      await client.query(`CREATE USER "${username}" WITH PASSWORD '${password}'`);
+      console.log(`User ${username} created.`);
+    } else {
+      await client.query(`ALTER USER "${username}" WITH PASSWORD '${password}'`);
+      console.log(`User ${username} password updated.`);
+    }
+
+    // Grant permissions
+    await client.query(`GRANT CONNECT ON DATABASE "${dbName}" TO "${username}"`);
+    await client.query(`GRANT USAGE ON SCHEMA public TO "${username}"`);
+    await client.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${username}"`);
+    await client.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+    
+    // Ensure future tables are accessible
+    await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${username}"`);
+    await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "${username}"`);
+
+    console.log(`Permissions granted to ${username} on ${dbName}.`);
+
+  } catch (err) {
+    console.error(`Error configuring user ${username}:`, err);
+    throw err;
+  } finally {
+    await client.end();
+  }
 }
 
 runMigrations().catch(console.error);

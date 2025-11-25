@@ -41,12 +41,14 @@ jobs:
     - name: OpenTofu Plan
       env:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+        TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
       run: tofu plan -input=false
 
     - name: OpenTofu Apply
       if: github.ref == 'refs/heads/master'
       env:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+        TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
       run: tofu apply -auto-approve -input=false
 
     - name: Export Terraform Outputs
@@ -142,5 +144,3 @@ jobs:
         aws ecs update-service --cluster collm-cluster --service collm-core-service --force-new-deployment
         aws ecs update-service --cluster collm-cluster --service collm-web --force-new-deployment
         aws ecs update-service --cluster collm-cluster --service collm-message-service --force-new-deployment
-        aws ecs update-service --cluster collm-cluster --service collm-user-service --force-new-deployment
-        aws ecs update-service --cluster collm-cluster --service collm-core-service --force-new-deployment
