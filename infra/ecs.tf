@@ -89,6 +89,14 @@ resource "aws_security_group" "ecs_tasks" {
   description = "Allow outbound access"
   vpc_id      = module.vpc.vpc_id
 
+  ingress {
+    description     = "Allow HTTP from ALB"
+    from_port       = 0
+    to_port         = 65535
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -143,6 +151,17 @@ resource "aws_ecr_repository" "migrator" {
   tags = local.tags
 }
 
+resource "aws_ecr_repository" "web" {
+  name                 = "${local.name}-web"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = local.tags
+}
+
 resource "aws_cloudwatch_log_group" "message_service" {
   name              = "/ecs/${local.name}-message-service"
   retention_in_days = 7
@@ -163,6 +182,12 @@ resource "aws_cloudwatch_log_group" "core_service" {
 
 resource "aws_cloudwatch_log_group" "migrator" {
   name              = "/ecs/${local.name}-migrator"
+  retention_in_days = 7
+  tags              = local.tags
+}
+
+resource "aws_cloudwatch_log_group" "web" {
+  name              = "/ecs/${local.name}-web"
   retention_in_days = 7
   tags              = local.tags
 }
@@ -282,6 +307,12 @@ resource "aws_ecs_service" "user_service" {
     assign_public_ip = false
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.user_service.arn
+    container_name   = "user-service"
+    container_port   = 3002
+  }
+
   tags = local.tags
 }
 
@@ -375,6 +406,83 @@ resource "aws_ecs_task_definition" "migrator" {
       }
     }
   ])
+
+  tags = local.tags
+}
+
+resource "aws_ecs_service" "migrator" {
+  name            = "${local.name}-migrator"
+  cluster         = module.ecs.cluster_id
+  task_definition = aws_ecs_task_definition.migrator.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  tags = local.tags
+}
+
+resource "aws_ecs_task_definition" "web" {
+  family                   = "${local.name}-web"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "web"
+      image = "${aws_ecr_repository.web.repository_url}:latest"
+      portMappings = [
+        {
+          containerPort = 3000
+          hostPort      = 3000
+        }
+      ]
+      environment = [
+        {
+          name  = "NEXT_PUBLIC_API_URL"
+          value = "" # Relative path, handled by CloudFront routing
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.web.name
+          "awslogs-region"        = local.region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+    }
+  ])
+
+  tags = local.tags
+}
+
+resource "aws_ecs_service" "web" {
+  name            = "${local.name}-web"
+  cluster         = module.ecs.cluster_id
+  task_definition = aws_ecs_task_definition.web.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.web.arn
+    container_name   = "web"
+    container_port   = 3000
+  }
 
   tags = local.tags
 }

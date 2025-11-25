@@ -15,7 +15,8 @@ export default function Register() {
     setError('');
 
     try {
-      const res = await fetch('http://localhost:3002/register', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${apiUrl}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
