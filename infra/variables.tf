@@ -9,3 +9,9 @@ variable "app_db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "image_tag" {
+  description = "Tag for the Docker images"
+  type        = string
+  default     = "latest"
+}

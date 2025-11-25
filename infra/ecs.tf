@@ -204,7 +204,7 @@ resource "aws_ecs_task_definition" "message_service" {
   container_definitions = jsonencode([
     {
       name  = "message-service"
-      image = "${aws_ecr_repository.message_service.repository_url}:latest"
+      image = "${aws_ecr_repository.message_service.repository_url}:${var.image_tag}"
       portMappings = [
         {
           containerPort = 3001
@@ -267,7 +267,7 @@ resource "aws_ecs_task_definition" "user_service" {
   container_definitions = jsonencode([
     {
       name  = "user-service"
-      image = "${aws_ecr_repository.user_service.repository_url}:latest"
+      image = "${aws_ecr_repository.user_service.repository_url}:${var.image_tag}"
       portMappings = [
         {
           containerPort = 3002
@@ -332,7 +332,7 @@ resource "aws_ecs_task_definition" "core_service" {
   container_definitions = jsonencode([
     {
       name  = "core-service"
-      image = "${aws_ecr_repository.core_service.repository_url}:latest"
+      image = "${aws_ecr_repository.core_service.repository_url}:${var.image_tag}"
       environment = [
         {
           name  = "SQS_QUEUE_URL"
@@ -389,7 +389,7 @@ resource "aws_ecs_task_definition" "migrator" {
   container_definitions = jsonencode([
     {
       name  = "migrator"
-      image = "${aws_ecr_repository.migrator.repository_url}:latest"
+      image = "${aws_ecr_repository.migrator.repository_url}:${var.image_tag}"
       environment = [
         {
           name  = "DATABASE_URL_USER"
@@ -446,7 +446,7 @@ resource "aws_ecs_task_definition" "web" {
   container_definitions = jsonencode([
     {
       name  = "web"
-      image = "${aws_ecr_repository.web.repository_url}:latest"
+      image = "${aws_ecr_repository.web.repository_url}:${var.image_tag}"
       portMappings = [
         {
           containerPort = 3000

@@ -4,14 +4,45 @@ on:
   push:
     branches: [ master ]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Manual Release Type'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+        - auto
+        - patch
+        - minor
+        - major
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
+  release:
+    name: Calculate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag_version.outputs.new_tag }}
+      changelog: ${{ steps.tag_version.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          custom_release_type: ${{ inputs.release_type != 'auto' && inputs.release_type || '' }}
+
   opentofu:
     name: OpenTofu
+    needs: release
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,6 +73,7 @@ jobs:
       env:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
+        TF_VAR_image_tag: ${{ needs.release.outputs.version }}
       run: tofu plan -input=false
 
     - name: OpenTofu Apply
@@ -49,6 +81,7 @@ jobs:
       env:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
+        TF_VAR_image_tag: ${{ needs.release.outputs.version }}
       run: tofu apply -auto-approve -input=false
 
     - name: Export Terraform Outputs
@@ -59,7 +92,7 @@ jobs:
         echo "security_group_id=$(tofu output -raw ecs_tasks_security_group_id)" >> $GITHUB_OUTPUT
 
   build:
-    needs: opentofu
+    needs: [opentofu, release]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     strategy:
@@ -98,7 +131,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ matrix.service.repo }}
-        IMAGE_TAG: ${{ github.sha }}
+        IMAGE_TAG: ${{ needs.release.outputs.version }}
       run: |
         docker build -f ${{ matrix.service.dockerfile }} -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG

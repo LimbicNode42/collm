@@ -22,6 +22,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client
+# Switch to PostgreSQL for production build
+RUN sed -i 's/provider[[:space:]]*=[[:space:]]*"sqlite"/provider = "postgresql"/g' packages/database/prisma/user.prisma
 RUN cd packages/database && npx prisma generate --schema=./prisma/user.prisma && npx prisma generate --schema=./prisma/core.prisma
 
 # Build the web app
