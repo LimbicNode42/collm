@@ -17,6 +17,10 @@ fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'supersecret',
 });
 
+fastify.get('/health', async (request, reply) => {
+  return { status: 'ok' };
+});
+
 fastify.post('/register', async (request, reply) => {
   const body = request.body as any;
   const { email, password, name } = body;
