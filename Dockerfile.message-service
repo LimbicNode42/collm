@@ -9,7 +9,7 @@ FROM base AS builder
 WORKDIR /app
 COPY . .
 # Install dependencies for all workspaces
-RUN npm install
+RUN npm ci
 # Generate Prisma Client
 WORKDIR /app/packages/database
 RUN npm run generate
