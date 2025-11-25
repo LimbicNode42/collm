@@ -82,7 +82,7 @@ resource "aws_lb_listener" "http" {
 # Note: The frontend currently calls /register and /login directly on the user service port.
 # We should probably map /api/auth/* to the user service.
 # For now, let's route specific paths.
-resource "aws_lb_listener_rule" "user_service" {
+resource "aws_lb_listener_rule" "user_service_users" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
 
@@ -93,7 +93,29 @@ resource "aws_lb_listener_rule" "user_service" {
 
   condition {
     path_pattern {
-      values = ["/register", "/login", "/users/*"]
+      values = ["/users/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "user_service_auth" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 101
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.user_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/register", "/login"]
+    }
+  }
+
+  condition {
+    http_request_method {
+      values = ["POST"]
     }
   }
 }
