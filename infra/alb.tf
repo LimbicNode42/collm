@@ -84,7 +84,7 @@ resource "aws_lb_listener" "http" {
 # For now, let's route specific paths.
 resource "aws_lb_listener_rule" "user_service_users" {
   listener_arn = aws_lb_listener.http.arn
-  priority     = 100
+  priority     = 110
 
   action {
     type             = "forward"
@@ -100,7 +100,7 @@ resource "aws_lb_listener_rule" "user_service_users" {
 
 resource "aws_lb_listener_rule" "user_service_auth" {
   listener_arn = aws_lb_listener.http.arn
-  priority     = 101
+  priority     = 111
 
   action {
     type             = "forward"
