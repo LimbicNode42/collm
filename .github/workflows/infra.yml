@@ -136,6 +136,8 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: us-east-1
 
+    - name: Force ECS Deployment
+      run: |
         aws ecs update-service --cluster collm-cluster --service collm-user-service --force-new-deployment
         aws ecs update-service --cluster collm-cluster --service collm-core-service --force-new-deployment
         aws ecs update-service --cluster collm-cluster --service collm-web --force-new-deployment
