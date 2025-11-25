@@ -6,7 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev": "node scripts/dev.js"
   },
   "lint-staged": {
     "infra/**/*.tf": [
