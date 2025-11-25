@@ -26,8 +26,7 @@ WORKDIR /app
 # Copy necessary files
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/apps/user-service/dist ./apps/user-service/dist
-COPY --from=builder /app/apps/user-service/package.json ./apps/user-service/package.json
+COPY --from=builder /app/apps/user-service ./apps/user-service
 
 WORKDIR /app/apps/user-service
 EXPOSE 3002
