@@ -154,11 +154,26 @@ jobs:
         SUBNETS: ${{ needs.opentofu.outputs.private_subnets }}
         SECURITY_GROUP: ${{ needs.opentofu.outputs.security_group_id }}
       run: |
-        aws ecs run-task \
+        TASK_ARN=$(aws ecs run-task \
           --cluster collm-cluster \
           --task-definition collm-migrator \
           --launch-type FARGATE \
-          --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}"
+          --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+          --query "tasks[0].taskArn" --output text)
+        
+        echo "Started migration task: $TASK_ARN"
+        echo "Waiting for migration task to complete..."
+        
+        aws ecs wait tasks-stopped --cluster collm-cluster --tasks $TASK_ARN
+        
+        EXIT_CODE=$(aws ecs describe-tasks --cluster collm-cluster --tasks $TASK_ARN --query "tasks[0].containers[0].exitCode" --output text)
+        
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "Migration task failed with exit code $EXIT_CODE"
+          exit 1
+        else
+          echo "Migration task completed successfully"
+        fi
 
   deploy:
     needs: migrate
