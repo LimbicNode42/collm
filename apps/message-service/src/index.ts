@@ -7,6 +7,24 @@ const fastify = Fastify({
   logger: true
 });
 
+fastify.get('/health', async (request, reply) => {
+  return { status: 'ok' };
+});
+
+fastify.get('/queue/pop', async (request, reply) => {
+  try {
+    const message = await messageQueue.dequeue();
+    if (message) {
+      return reply.send({ success: true, message });
+    } else {
+      return reply.code(404).send({ success: false, error: 'Queue is empty' });
+    }
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
 fastify.post('/message', async (request, reply) => {
   const body = request.body as any;
   const { userId, nodeId, content, targetNodeVersion } = body;

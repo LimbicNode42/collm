@@ -274,6 +274,12 @@ resource "aws_ecs_service" "message_service" {
     assign_public_ip = false
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.message_service.arn
+    container_name   = "message-service"
+    container_port   = 3001
+  }
+
   tags = local.tags
 }
 

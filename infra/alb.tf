@@ -65,6 +65,22 @@ resource "aws_lb_target_group" "user_service" {
   tags = local.tags
 }
 
+resource "aws_lb_target_group" "message_service" {
+  name        = "${local.name}-message-tg"
+  port        = 3001
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    healthy_threshold   = 2
+    unhealthy_threshold = 10
+  }
+
+  tags = local.tags
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -116,6 +132,22 @@ resource "aws_lb_listener_rule" "user_service_auth" {
   condition {
     http_request_method {
       values = ["POST"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "message_service" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 120
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.message_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/message", "/queue/*"]
     }
   }
 }
