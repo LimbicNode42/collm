@@ -151,3 +151,26 @@ resource "aws_lb_listener_rule" "message_service" {
     }
   }
 }
+
+// Rule to route /message/* to message-service
+resource "aws_lb_listener_rule" "message_service_get" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 121
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.message_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/message/*"]
+    }
+  }
+
+  condition {
+    http_request_method {
+      values = ["GET"]
+    }
+  }
+}

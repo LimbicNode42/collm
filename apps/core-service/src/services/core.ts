@@ -1,6 +1,7 @@
 import { Node, Message } from '@collm/types';
 import { llmService } from './llm';
 import { vectorStore } from './vectorStore';
+import { prismaCore } from '@collm/database';
 
 export interface ICoreEngine {
   /**
@@ -21,36 +22,42 @@ export interface ICoreEngine {
 }
 
 export class LLMCoreEngine implements ICoreEngine {
-  // In-memory store for mock purposes (replace with DB calls in production)
-  private nodes: Map<string, Node> = new Map();
-
   async createNode(topic: string, initialDescription: string): Promise<Node> {
-    const id = Math.random().toString(36).substring(7);
-    
     // Generate initial state using LLM
     const prompt = `Initialize a conversation state for the topic: "${topic}". Description: "${initialDescription}". Provide a concise summary of the starting point.`;
     const response = await llmService.generateCompletion(prompt);
     
-    const newNode: Node = {
-      id,
-      topic,
-      description: initialDescription,
-      state: response.content,
-      version: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const node = await prismaCore.node.create({
+      data: {
+        topic,
+        description: initialDescription,
+        state: response.content,
+        version: 1,
+      }
+    });
+
+    const domainNode: Node = {
+      id: node.id,
+      topic: node.topic,
+      description: node.description || undefined,
+      state: node.state,
+      version: node.version,
+      createdAt: node.createdAt,
+      updatedAt: node.updatedAt,
     };
-    this.nodes.set(id, newNode);
     
     // Add to vector store for discovery
-    await vectorStore.addNode(id, `${topic}: ${initialDescription}`);
+    await vectorStore.addNode(node.id, `${topic}: ${initialDescription}`);
     
-    console.log(`[CoreEngine] Created node ${id} for topic "${topic}"`);
-    return newNode;
+    console.log(`[CoreEngine] Created node ${node.id} for topic "${topic}"`);
+    return domainNode;
   }
 
   async updateNodeState(nodeId: string, newMessages: Message[]): Promise<Node> {
-    const node = this.nodes.get(nodeId);
+    const node = await prismaCore.node.findUnique({
+      where: { id: nodeId }
+    });
+
     if (!node) {
       throw new Error(`Node ${nodeId} not found`);
     }
@@ -70,19 +77,43 @@ Task: Update the conversation state to incorporate the new information. Keep the
 
     const response = await llmService.generateCompletion(prompt);
     
-    const updatedNode = {
-      ...node,
-      state: response.content,
-      version: node.version + 1,
-      updatedAt: new Date(),
-    };
-    this.nodes.set(nodeId, updatedNode);
+    const updatedNode = await prismaCore.node.update({
+      where: { id: nodeId },
+      data: {
+        state: response.content,
+        version: { increment: 1 },
+      }
+    });
     
-    return updatedNode;
+    const domainNode: Node = {
+      id: updatedNode.id,
+      topic: updatedNode.topic,
+      description: updatedNode.description || undefined,
+      state: updatedNode.state,
+      version: updatedNode.version,
+      createdAt: updatedNode.createdAt,
+      updatedAt: updatedNode.updatedAt,
+    };
+
+    return domainNode;
   }
 
   async getNode(nodeId: string): Promise<Node | null> {
-    return this.nodes.get(nodeId) || null;
+    const node = await prismaCore.node.findUnique({
+      where: { id: nodeId }
+    });
+
+    if (!node) return null;
+
+    return {
+      id: node.id,
+      topic: node.topic,
+      description: node.description || undefined,
+      state: node.state,
+      version: node.version,
+      createdAt: node.createdAt,
+      updatedAt: node.updatedAt,
+    };
   }
 }
 

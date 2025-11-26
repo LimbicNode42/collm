@@ -45,6 +45,22 @@ fastify.post('/queue/create-node', async (request, reply) => {
   }
 });
 
+fastify.get('/message/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    const message = await prismaCore.message.findUnique({
+      where: { id }
+    });
+    if (!message) {
+      return reply.code(404).send({ error: 'Message not found' });
+    }
+    return reply.send({ success: true, message });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
 fastify.post('/message', async (request, reply) => {
   const body = request.body as any;
   const { userId, nodeId, content, targetNodeVersion } = body;

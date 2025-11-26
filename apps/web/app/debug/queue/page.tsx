@@ -11,7 +11,22 @@ export default function QueueDebugPage() {
   const [pushResult, setPushResult] = useState<any>(null);
   const [popResult, setPopResult] = useState<any>(null);
   const [nodeResult, setNodeResult] = useState<any>(null);
+  const [messageStatus, setMessageStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleCheckStatus = async () => {
+    if (!pushResult?.data?.messageId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/message/${pushResult.data.messageId}`);
+      const data = await res.json();
+      setMessageStatus(data);
+    } catch (err: any) {
+      setMessageStatus({ error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateNode = async () => {
     setLoading(true);
@@ -136,6 +151,20 @@ export default function QueueDebugPage() {
         {pushResult && (
           <div className="mt-4 p-4 bg-gray-100 rounded overflow-auto">
             <pre className="text-xs">{JSON.stringify(pushResult, null, 2)}</pre>
+            {pushResult.success && (
+              <button
+                onClick={handleCheckStatus}
+                className="mt-2 bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700"
+              >
+                Check Status
+              </button>
+            )}
+            {messageStatus && (
+              <div className="mt-2 border-t pt-2">
+                <p className="font-semibold text-sm">Current Status:</p>
+                <pre className="text-xs">{JSON.stringify(messageStatus, null, 2)}</pre>
+              </div>
+            )}
           </div>
         )}
       </div>
