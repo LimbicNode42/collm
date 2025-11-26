@@ -243,6 +243,10 @@ resource "aws_ecs_task_definition" "message_service" {
           value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
         },
         {
+          name  = "DATABASE_URL_CORE"
+          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+        },
+        {
           name  = "AWS_REGION"
           value = local.region
         }
