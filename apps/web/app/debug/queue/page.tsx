@@ -10,7 +10,29 @@ export default function QueueDebugPage() {
   
   const [pushResult, setPushResult] = useState<any>(null);
   const [popResult, setPopResult] = useState<any>(null);
+  const [nodeResult, setNodeResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleCreateNode = async () => {
+    setLoading(true);
+    setNodeResult(null);
+    try {
+      const res = await fetch('/queue/create-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: 'Debug Node', description: 'Created for testing' }),
+      });
+      const data = await res.json();
+      setNodeResult(data);
+      if (data.success && data.node?.id) {
+        setNodeId(data.node.id);
+      }
+    } catch (err: any) {
+      setNodeResult({ error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePush = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +71,22 @@ export default function QueueDebugPage() {
     <div className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Queue Debugger</h1>
       
+      <div className="bg-white p-6 rounded-lg shadow-md mb-8 text-black">
+        <h2 className="text-xl font-semibold mb-4">Setup</h2>
+        <button
+          onClick={handleCreateNode}
+          disabled={loading}
+          className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50 mb-4"
+        >
+          {loading ? 'Creating...' : 'Create Test Node'}
+        </button>
+        {nodeResult && (
+          <div className="p-4 bg-gray-100 rounded overflow-auto">
+            <pre className="text-xs">{JSON.stringify(nodeResult, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+
       <div className="bg-white p-6 rounded-lg shadow-md mb-8 text-black">
         <h2 className="text-xl font-semibold mb-4">Push Message</h2>
         <form onSubmit={handlePush} className="space-y-4">

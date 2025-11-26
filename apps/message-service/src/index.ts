@@ -25,6 +25,26 @@ fastify.get('/queue/pop', async (request, reply) => {
   }
 });
 
+fastify.post('/queue/create-node', async (request, reply) => {
+  const body = request.body as any;
+  const { topic, description, state } = body;
+
+  try {
+    const node = await prismaCore.node.create({
+      data: {
+        topic: topic || 'Test Topic',
+        description: description || 'Created via debug endpoint',
+        state: state || 'Initial State',
+        version: 1
+      }
+    });
+    return reply.send({ success: true, node });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
 fastify.post('/message', async (request, reply) => {
   const body = request.body as any;
   const { userId, nodeId, content, targetNodeVersion } = body;
