@@ -22,6 +22,24 @@ export interface ILLMService {
 export class MockLLMService implements ILLMService {
   async generateCompletion(prompt: string, _systemPrompt?: string): Promise<LLMResponse> {
     console.log(`[LLMService] Generating completion for prompt: "${prompt.substring(0, 50)}..."`);
+    
+    // Return a valid JSON response for the adjudication engine
+    if (prompt.includes("isRelevant")) {
+      return {
+        content: JSON.stringify({
+          isRelevant: true,
+          isStale: false,
+          reason: "This is a mock response. The message is considered relevant and fresh.",
+          score: 0.95
+        }),
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      };
+    }
+
     return {
       content: "This is a mock LLM response. In a real implementation, this would be the output from OpenAI or Anthropic.",
       usage: {
