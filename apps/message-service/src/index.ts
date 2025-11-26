@@ -7,7 +7,7 @@ const fastify = Fastify({
   logger: true
 });
 
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async () => {
   return { status: 'ok' };
 });
 
