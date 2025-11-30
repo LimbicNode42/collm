@@ -27,7 +27,7 @@ fastify.get('/queue/pop', async (request, reply) => {
 
 fastify.post('/queue/create-node', async (request, reply) => {
   const body = request.body as any;
-  const { topic, description, state } = body;
+  const { topic, description, state, model } = body;
 
   try {
     const node = await prismaCore.node.create({
@@ -35,9 +35,56 @@ fastify.post('/queue/create-node', async (request, reply) => {
         topic: topic || 'Test Topic',
         description: description || 'Created via debug endpoint',
         state: state || 'Initial State',
+        model: model || 'claude-sonnet-4-5-20250929',
         version: 1
       }
     });
+    return reply.send({ success: true, node });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+fastify.get('/nodes', async (request, reply) => {
+  try {
+    const nodes = await prismaCore.node.findMany({
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        topic: true,
+        description: true,
+        model: true,
+        version: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { messages: true }
+        }
+      }
+    });
+    return reply.send({ success: true, nodes });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+fastify.get('/node/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    const node = await prismaCore.node.findUnique({
+      where: { id },
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          take: 50
+        }
+      }
+    });
+    if (!node) {
+      return reply.code(404).send({ error: 'Node not found' });
+    }
     return reply.send({ success: true, node });
   } catch (error) {
     request.log.error(error);

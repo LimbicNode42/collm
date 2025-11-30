@@ -12,7 +12,7 @@ export interface IAdjudicationEngine {
 
 export class LLMAdjudicationEngine implements IAdjudicationEngine {
   async adjudicate(message: Message, node: Node): Promise<AdjudicationResult> {
-    console.log(`[AdjudicationEngine] Evaluating message ${message.id} against node ${node.id} (v${node.version})`);
+    console.log(`[AdjudicationEngine] Evaluating message ${message.id} against node ${node.id} (v${node.version}) using model "${node.model}"`);
 
     const prompt = `
 You are an impartial adjudicator for a collaborative conversation.
@@ -37,8 +37,10 @@ Respond with a JSON object in the following format:
 }
     `;
 
+    const systemPrompt = "You are an expert conversation moderator. Always respond with valid JSON in the exact format requested.";
+
     try {
-      const response = await llmService.generateCompletion(prompt);
+      const response = await llmService.generateCompletion(prompt, systemPrompt, node.model);
       // Basic parsing - in production, use a more robust JSON parser or structured output mode
       const result = JSON.parse(response.content);
 

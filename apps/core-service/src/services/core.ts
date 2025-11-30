@@ -7,7 +7,7 @@ export interface ICoreEngine {
   /**
    * Creates a new conversation node (thread).
    */
-  createNode(topic: string, initialDescription: string): Promise<Node>;
+  createNode(topic: string, initialDescription: string, model?: string): Promise<Node>;
 
   /**
    * Updates the state of a node based on new accepted messages.
@@ -19,19 +19,25 @@ export interface ICoreEngine {
    * Retrieves a node by ID.
    */
   getNode(nodeId: string): Promise<Node | null>;
+
+  /**
+   * Lists all available nodes.
+   */
+  listNodes(): Promise<Node[]>;
 }
 
 export class LLMCoreEngine implements ICoreEngine {
-  async createNode(topic: string, initialDescription: string): Promise<Node> {
-    // Generate initial state using LLM
+  async createNode(topic: string, initialDescription: string, model: string = 'claude-sonnet-4-5-20250929'): Promise<Node> {
+    // Generate initial state using LLM with the specified model
     const prompt = `Initialize a conversation state for the topic: "${topic}". Description: "${initialDescription}". Provide a concise summary of the starting point.`;
-    const response = await llmService.generateCompletion(prompt);
+    const response = await llmService.generateCompletion(prompt, '', model);
     
     const node = await prismaCore.node.create({
       data: {
         topic,
         description: initialDescription,
         state: response.content,
+        model,
         version: 1,
       }
     });
@@ -41,6 +47,7 @@ export class LLMCoreEngine implements ICoreEngine {
       topic: node.topic,
       description: node.description || undefined,
       state: node.state,
+      model: node.model,
       version: node.version,
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
@@ -49,7 +56,7 @@ export class LLMCoreEngine implements ICoreEngine {
     // Add to vector store for discovery
     await vectorStore.addNode(node.id, `${topic}: ${initialDescription}`);
     
-    console.log(`[CoreEngine] Created node ${node.id} for topic "${topic}"`);
+    console.log(`[CoreEngine] Created node ${node.id} for topic "${topic}" using model "${model}"`);
     return domainNode;
   }
 
@@ -62,7 +69,7 @@ export class LLMCoreEngine implements ICoreEngine {
       throw new Error(`Node ${nodeId} not found`);
     }
 
-    console.log(`[CoreEngine] Updating state for node ${nodeId} with ${newMessages.length} new messages`);
+    console.log(`[CoreEngine] Updating state for node ${nodeId} with ${newMessages.length} new messages using model "${node.model}"`);
     
     const messagesText = newMessages.map(m => `- ${m.content}`).join('\n');
     const prompt = `
@@ -75,7 +82,7 @@ ${messagesText}
 Task: Update the conversation state to incorporate the new information. Keep the summary concise but comprehensive.
     `;
 
-    const response = await llmService.generateCompletion(prompt);
+    const response = await llmService.generateCompletion(prompt, '', node.model);
     
     const updatedNode = await prismaCore.node.update({
       where: { id: nodeId },
@@ -90,6 +97,7 @@ Task: Update the conversation state to incorporate the new information. Keep the
       topic: updatedNode.topic,
       description: updatedNode.description || undefined,
       state: updatedNode.state,
+      model: updatedNode.model,
       version: updatedNode.version,
       createdAt: updatedNode.createdAt,
       updatedAt: updatedNode.updatedAt,
@@ -110,10 +118,28 @@ Task: Update the conversation state to incorporate the new information. Keep the
       topic: node.topic,
       description: node.description || undefined,
       state: node.state,
+      model: node.model,
       version: node.version,
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
     };
+  }
+
+  async listNodes(): Promise<Node[]> {
+    const nodes = await prismaCore.node.findMany({
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    return nodes.map(node => ({
+      id: node.id,
+      topic: node.topic,
+      description: node.description || undefined,
+      state: node.state,
+      model: node.model,
+      version: node.version,
+      createdAt: node.createdAt,
+      updatedAt: node.updatedAt,
+    }));
   }
 }
 

@@ -16,6 +16,7 @@ model Node {
   description String?
   state       String   @db.Text
   embedding   Unsupported("vector(1536)")?
+  model       String   @default("claude-sonnet-4-5-20250929")
   version     Int      @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

@@ -382,6 +382,32 @@ resource "aws_ecs_task_definition" "core_service" {
         {
           name  = "AWS_REGION"
           value = local.region
+        },
+        {
+          name  = "OPENAI_BASE_URL"
+          value = "https://api.openai.com/v1"
+        },
+        {
+          name  = "ANTHROPIC_BASE_URL"
+          value = "https://api.anthropic.com"
+        },
+        {
+          name  = "GOOGLE_BASE_URL"
+          value = "https://generativelanguage.googleapis.com/v1beta"
+        }
+      ]
+      secrets = [
+        {
+          name      = "OPENAI_API_KEY"
+          valueFrom = "${aws_secretsmanager_secret.llm_keys.arn}:OPENAI_API_KEY::"
+        },
+        {
+          name      = "ANTHROPIC_API_KEY"
+          valueFrom = "${aws_secretsmanager_secret.llm_keys.arn}:ANTHROPIC_API_KEY::"
+        },
+        {
+          name      = "GOOGLE_API_KEY"
+          valueFrom = "${aws_secretsmanager_secret.llm_keys.arn}:GOOGLE_API_KEY::"
         }
       ]
       logConfiguration = {

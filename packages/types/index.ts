@@ -11,6 +11,7 @@ export interface Node {
   topic: string;
   description?: string | null;
   state: string; // Serialized LLM state or summary
+  model: string; // LLM model to use for this node
   version: number;
   createdAt: Date;
   updatedAt: Date;
