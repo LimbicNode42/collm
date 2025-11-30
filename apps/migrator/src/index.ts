@@ -20,7 +20,9 @@ async function createDatabaseIfNotExists(connectionString: string) {
   });
   
   try {
+    console.log(`Attempting to connect to PostgreSQL server as user: ${client.user}`);
     await client.connect();
+    console.log(`Successfully connected to PostgreSQL server`);
     
     const res = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
     
@@ -31,8 +33,13 @@ async function createDatabaseIfNotExists(connectionString: string) {
     } else {
       console.log(`Database ${dbName} already exists.`);
     }
-  } catch (err) {
-    console.error(`Error checking/creating database ${dbName}:`, err);
+  } catch (err: any) {
+    console.error(`Error checking/creating database ${dbName}:`);
+    console.error(`Error code: ${err.code}`);
+    console.error(`Error message: ${err.message}`);
+    if (err.code === '28P01') {
+      console.error('This is a password authentication failure. Check that the database password is correct.');
+    }
     throw err;
   } finally {
     await client.end();
@@ -46,6 +53,22 @@ async function runMigrations() {
   if (!userDbUrl || !coreDbUrl) {
     console.error("Missing DATABASE_URL_USER or DATABASE_URL_CORE environment variables.");
     process.exit(1);
+  }
+
+  console.log("Environment check:");
+  console.log("DATABASE_URL_USER:", userDbUrl ? `Set (length: ${userDbUrl.length})` : "Not set");
+  console.log("DATABASE_URL_CORE:", coreDbUrl ? `Set (length: ${coreDbUrl.length})` : "Not set");
+  
+  // Parse and log connection details (without password)
+  if (userDbUrl) {
+    const userUrl = new URL(userDbUrl);
+    console.log("User DB connection: ", {
+      username: userUrl.username,
+      hostname: userUrl.hostname,
+      port: userUrl.port,
+      database: userUrl.pathname.substring(1),
+      passwordLength: userUrl.password?.length || 0
+    });
   }
 
   console.log("Ensuring databases exist...");

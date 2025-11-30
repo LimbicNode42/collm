@@ -11,8 +11,20 @@ const fastify = Fastify({
 });
 
 // Health check
-fastify.get('/health', async () => {
-  return { status: 'ok', service: 'core-service' };
+fastify.get('/health', async (request, reply) => {
+  try {
+    // Test database connectivity
+    await prismaCore.$queryRaw`SELECT 1 as health`;
+    return { status: 'ok', service: 'core-service', database: 'connected' };
+  } catch (error) {
+    request.log.error('Health check failed:', error);
+    return reply.code(503).send({ 
+      status: 'error', 
+      service: 'core-service', 
+      database: 'disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 // Node management endpoints
@@ -61,9 +73,31 @@ fastify.get('/nodes/:id', async (request, reply) => {
   }
 });
 
+// Test database connection
+const testDatabaseConnection = async () => {
+  console.log('[CoreService] Testing database connection...');
+  try {
+    await prismaCore.$connect();
+    console.log('[CoreService] Database connection successful');
+    await prismaCore.$disconnect();
+  } catch (error) {
+    console.error('[CoreService] Database connection failed:', error);
+    console.error('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set (length: ' + process.env.DATABASE_URL_CORE.length + ')' : 'Not set');
+    throw error;
+  }
+};
+
 // Start HTTP server
 const startHttpServer = async () => {
   try {
+    console.log('[CoreService] Environment check:');
+    console.log('[CoreService] DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
+    console.log('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set' : 'Not set');
+    console.log('[CoreService] SQS_QUEUE_URL:', process.env.SQS_QUEUE_URL ? 'Set' : 'Not set');
+    
+    // Test database connection before starting server
+    await testDatabaseConnection();
+    
     await fastify.listen({ port: 3003, host: '0.0.0.0' });
     console.log('[CoreService] HTTP server started on port 3003');
   } catch (err) {
