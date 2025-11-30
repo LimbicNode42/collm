@@ -73,7 +73,7 @@ export class RealLLMService implements ILLMService {
       throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     
     return {
       content: data.choices[0].message.content,
@@ -112,7 +112,7 @@ export class RealLLMService implements ILLMService {
       throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     
     return {
       content: data.content[0].text,
@@ -153,7 +153,7 @@ export class RealLLMService implements ILLMService {
       throw new Error(`Google API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     
     if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
       throw new Error('Invalid response from Google API');
@@ -215,7 +215,7 @@ export class RealLLMService implements ILLMService {
       throw new Error(`OpenAI Embeddings API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     return data.data[0].embedding;
   }
 }

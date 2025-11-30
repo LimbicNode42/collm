@@ -44,6 +44,7 @@ async function processMessage() {
       description: node.description || undefined,
       state: node.state,
       version: node.version,
+      model: node.model,
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
     };
