@@ -81,6 +81,22 @@ resource "aws_lb_target_group" "message_service" {
   tags = local.tags
 }
 
+resource "aws_lb_target_group" "core_service" {
+  name        = "${local.name}-core-tg"
+  port        = 3003
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    healthy_threshold   = 2
+    unhealthy_threshold = 10
+  }
+
+  tags = local.tags
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
@@ -171,6 +187,23 @@ resource "aws_lb_listener_rule" "message_service_get" {
   condition {
     http_request_method {
       values = ["GET"]
+    }
+  }
+}
+
+// Rule to route /nodes* to core-service
+resource "aws_lb_listener_rule" "core_service_nodes" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 130
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.core_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/nodes", "/nodes/*"]
     }
   }
 }

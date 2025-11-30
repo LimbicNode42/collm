@@ -1,8 +1,76 @@
+import Fastify from 'fastify';
 import { messageQueue } from './services/queue';
 import { adjudicationEngine } from './services/adjudication';
 import { coreEngine } from './services/core';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from '@collm/types';
+
+// HTTP Server for Node Management
+const fastify = Fastify({
+  logger: true
+});
+
+// Health check
+fastify.get('/health', async () => {
+  return { status: 'ok', service: 'core-service' };
+});
+
+// Node management endpoints
+fastify.post('/nodes', async (request, reply) => {
+  const body = request.body as any;
+  const { topic, description, model } = body;
+
+  if (!topic) {
+    return reply.code(400).send({ error: 'Topic is required' });
+  }
+
+  try {
+    const node = await coreEngine.createNode(
+      topic,
+      description || 'Node created via API',
+      model || 'claude-sonnet-4-5-20250929'
+    );
+    return reply.send({ success: true, node });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+fastify.get('/nodes', async (request, reply) => {
+  try {
+    const nodes = await coreEngine.listNodes();
+    return reply.send({ success: true, nodes });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+fastify.get('/nodes/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    const node = await coreEngine.getNode(id);
+    if (!node) {
+      return reply.code(404).send({ error: 'Node not found' });
+    }
+    return reply.send({ success: true, node });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+// Start HTTP server
+const startHttpServer = async () => {
+  try {
+    await fastify.listen({ port: 3003, host: '0.0.0.0' });
+    console.log('[CoreService] HTTP server started on port 3003');
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
 
 async function processMessage() {
   const queueMessage = await messageQueue.dequeue();
@@ -99,7 +167,7 @@ async function processMessage() {
   return true;
 }
 
-async function main() {
+async function startMessageProcessor() {
   console.log('[CoreService] Starting message processor...');
   
   let running = true;
@@ -125,6 +193,16 @@ async function main() {
       }
     }
   }
+}
+
+async function main() {
+  console.log('[CoreService] Starting core service...');
+  
+  // Start HTTP server for node management
+  await startHttpServer();
+  
+  // Start message processor
+  await startMessageProcessor();
 }
 
 if (require.main === module) {

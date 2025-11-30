@@ -387,6 +387,12 @@ resource "aws_ecs_task_definition" "core_service" {
     {
       name  = "core-service"
       image = "${aws_ecr_repository.core_service.repository_url}:${var.image_tag}"
+      portMappings = [
+        {
+          containerPort = 3003
+          hostPort      = 3003
+        }
+      ]
       environment = [
         {
           name  = "SQS_QUEUE_URL"
@@ -456,6 +462,12 @@ resource "aws_ecs_service" "core_service" {
     subnets          = module.vpc.private_subnets
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.core_service.arn
+    container_name   = "core-service"
+    container_port   = 3003
   }
 
   tags = local.tags

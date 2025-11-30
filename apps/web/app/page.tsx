@@ -59,6 +59,48 @@ export default function Home() {
       <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-to-br before:from-transparent before:to-blue-700 before:opacity-10 after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-to-t after:from-blue-900 after:via-blue-900 after:opacity-40 before:lg:h-[360px] z-[-1]">
         <h1 className="text-6xl font-bold">Collm</h1>
       </div>
+
+      <div className="mt-16 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-3 lg:text-left gap-6">
+        <Link
+          href="/test"
+          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
+        >
+          <h2 className="mb-3 text-2xl font-semibold">
+            Test Features{' '}
+            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
+              -&gt;
+            </span>
+          </h2>
+          <p className="m-0 max-w-[30ch] text-sm opacity-50">
+            Comprehensive testing dashboard for all system features without remembering URLs.
+          </p>
+        </Link>
+
+        <Link
+          href="/debug/queue"
+          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
+        >
+          <h2 className="mb-3 text-2xl font-semibold">
+            Queue Debug{' '}
+            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
+              -&gt;
+            </span>
+          </h2>
+          <p className="m-0 max-w-[30ch] text-sm opacity-50">
+            Debug message queue operations and processing.
+          </p>
+        </Link>
+
+        <div className="group rounded-lg border border-transparent px-5 py-4">
+          <h2 className="mb-3 text-2xl font-semibold">Features</h2>
+          <ul className="m-0 max-w-[30ch] text-sm opacity-50 list-disc list-inside">
+            <li>Multi-model LLM support</li>
+            <li>Node-based conversations</li>
+            <li>Real-time processing</li>
+            <li>User management</li>
+          </ul>
+        </div>
+      </div>
     </main>
   );
 }

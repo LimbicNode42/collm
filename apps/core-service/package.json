@@ -10,7 +10,8 @@
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.936.0",
     "@collm/types": "*",
-    "@collm/database": "*"
+    "@collm/database": "*",
+    "fastify": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
