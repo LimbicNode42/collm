@@ -56,3 +56,10 @@ This project is a collaborative forum powered by LLMs. It uses a graph of nodes 
 1. Configure your database URL in \`.env\`.
 2. Run \`npx prisma generate\` to generate the client.
 3. Run \`npx prisma db push\` to sync the schema.
+
+## Changelog
+
+### 2025-11-30 - AI Code Assistance Model Change
+- **Changed AI model from Gemini 3 to Claude Sonnet 4** for code assistance
+- **Reason**: Joined organization which causes business Copilot license to override existing personal Copilot license. Business license doesn't include Gemini 3 model or preview features which personal license included.
+- **Impact**: Development workflow continues with Claude Sonnet 4 providing code assistance and technical guidance.
