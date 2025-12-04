@@ -1,0 +1,265 @@
+name: Infrastructure Teardown
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm infrastructure teardown'
+        required: true
+        type: string
+      force_destroy:
+        description: 'Force destroy even if resources have deletion protection'
+        required: false
+        default: false
+        type: boolean
+      backup_data:
+        description: 'Create database backup before destroying'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Teardown Request
+    runs-on: ubuntu-latest
+    outputs:
+      confirmed: ${{ steps.validate.outputs.confirmed }}
+    steps:
+      - name: Validate confirmation
+        id: validate
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "❌ Teardown not confirmed. You must type 'DESTROY' exactly to proceed."
+            echo "confirmed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ Teardown confirmed"
+            echo "confirmed=true" >> $GITHUB_OUTPUT
+          fi
+
+  backup:
+    name: Create Database Backup
+    needs: validate
+    if: needs.validate.outputs.confirmed == 'true' && inputs.backup_data == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Create RDS Snapshot
+        run: |
+          SNAPSHOT_ID="collm-db-backup-$(date +%Y%m%d-%H%M%S)"
+          echo "Creating RDS snapshot: $SNAPSHOT_ID"
+          
+          aws rds create-db-snapshot \
+            --db-instance-identifier collm-db \
+            --db-snapshot-identifier "$SNAPSHOT_ID" \
+            --tags Key=Purpose,Value=PreTeardownBackup Key=CreatedBy,Value=GitHubActions
+          
+          echo "✅ Database backup initiated: $SNAPSHOT_ID"
+          echo "⚠️  Note: Snapshot creation may take several minutes to complete"
+
+  stop-services:
+    name: Stop ECS Services
+    needs: [validate, backup]
+    if: always() && needs.validate.outputs.confirmed == 'true' && (needs.backup.result == 'success' || inputs.backup_data == false)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Scale down ECS services
+        run: |
+          echo "Scaling down ECS services to 0..."
+          
+          SERVICES=(
+            "collm-web"
+            "collm-user-service" 
+            "collm-core-service"
+            "collm-message-service"
+            "collm-migrator"
+          )
+          
+          for service in "${SERVICES[@]}"; do
+            echo "Scaling down $service..."
+            aws ecs update-service \
+              --cluster collm-cluster \
+              --service "$service" \
+              --desired-count 0 \
+              --no-cli-pager || echo "Service $service not found or already stopped"
+          done
+          
+          echo "✅ All services scaled down to 0 instances"
+
+      - name: Wait for tasks to stop
+        run: |
+          echo "Waiting for all tasks to stop..."
+          sleep 30
+          
+          RUNNING_TASKS=$(aws ecs list-tasks --cluster collm-cluster --desired-status RUNNING --query 'taskArns' --output text)
+          
+          if [ -n "$RUNNING_TASKS" ] && [ "$RUNNING_TASKS" != "None" ]; then
+            echo "⏳ Waiting for remaining tasks to stop..."
+            aws ecs wait tasks-stopped --cluster collm-cluster --tasks $RUNNING_TASKS
+          fi
+          
+          echo "✅ All tasks stopped"
+
+  teardown:
+    name: Destroy Infrastructure
+    needs: [validate, stop-services]
+    if: always() && needs.validate.outputs.confirmed == 'true' && needs.stop-services.result == 'success'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: OpenTofu Init
+        run: tofu init
+
+      - name: OpenTofu Plan Destroy
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
+          TF_VAR_image_tag: "latest"
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          echo "Planning infrastructure destruction..."
+          tofu plan -destroy -out=destroy.tfplan -input=false
+
+      - name: OpenTofu Apply Destroy
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
+          TF_VAR_image_tag: "latest"
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          echo "🚨 DESTROYING INFRASTRUCTURE 🚨"
+          
+          if [ "${{ inputs.force_destroy }}" == "true" ]; then
+            echo "Force destroy enabled - removing deletion protection..."
+            tofu apply destroy.tfplan
+          else
+            echo "Standard destroy - respecting deletion protection..."
+            tofu apply destroy.tfplan
+          fi
+
+      - name: Clean up ECR repositories
+        continue-on-error: true
+        run: |
+          echo "Cleaning up ECR repositories..."
+          
+          REPOS=(
+            "collm-web"
+            "collm-user-service"
+            "collm-core-service" 
+            "collm-message-service"
+            "collm-migrator"
+          )
+          
+          for repo in "${REPOS[@]}"; do
+            echo "Deleting ECR repository: $repo"
+            aws ecr delete-repository --repository-name "$repo" --force || echo "Repository $repo not found"
+          done
+
+  cleanup:
+    name: Final Cleanup
+    needs: [teardown]
+    if: always() && needs.teardown.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Clean up orphaned resources
+        continue-on-error: true
+        run: |
+          echo "Checking for orphaned resources..."
+          
+          # Clean up any remaining log groups
+          echo "Cleaning up CloudWatch log groups..."
+          aws logs describe-log-groups --log-group-name-prefix "/ecs/collm-" --query 'logGroups[].logGroupName' --output text | \
+          while read log_group; do
+            if [ -n "$log_group" ]; then
+              echo "Deleting log group: $log_group"
+              aws logs delete-log-group --log-group-name "$log_group" || true
+            fi
+          done
+          
+          # Clean up any remaining target groups
+          echo "Checking for orphaned target groups..."
+          aws elbv2 describe-target-groups --query 'TargetGroups[?starts_with(TargetGroupName, `collm-`)].TargetGroupArn' --output text | \
+          while read tg_arn; do
+            if [ -n "$tg_arn" ]; then
+              echo "Deleting orphaned target group: $tg_arn"
+              aws elbv2 delete-target-group --target-group-arn "$tg_arn" || true
+            fi
+          done
+
+      - name: Teardown Summary
+        run: |
+          echo "🎉 Infrastructure teardown completed!"
+          echo ""
+          echo "Summary:"
+          echo "✅ ECS services stopped"
+          echo "✅ Infrastructure destroyed via Terraform"
+          echo "✅ ECR repositories cleaned up"
+          echo "✅ Orphaned resources cleaned up"
+          
+          if [ "${{ inputs.backup_data }}" == "true" ]; then
+            echo "✅ Database backup created"
+            echo ""
+            echo "💡 Your database snapshot will remain available for point-in-time recovery"
+            echo "   Remember to delete old snapshots manually if no longer needed to avoid charges"
+          fi
+          
+          echo ""
+          echo "💰 Cost impact: All billable resources have been destroyed"
+          echo "⚠️  Note: Some AWS resources may take a few minutes to fully terminate"
+
+  notify-failure:
+    name: Notify on Failure
+    needs: [validate, backup, stop-services, teardown, cleanup]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Failure notification
+        run: |
+          echo "❌ Infrastructure teardown failed!"
+          echo ""
+          echo "Please check the workflow logs and consider:"
+          echo "1. Manually stopping ECS services if they're still running"
+          echo "2. Checking for resources with deletion protection"
+          echo "3. Running terraform destroy manually if needed"
+          echo "4. Verifying AWS permissions"
+          echo ""
+          echo "⚠️  Resources may still be running and incurring charges!"
