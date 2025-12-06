@@ -40,13 +40,54 @@ jobs:
           default_bump: patch
           custom_release_type: ${{ inputs.release_type != 'auto' && inputs.release_type || '' }}
 
-  opentofu:
-    name: OpenTofu
+  persistent:
+    name: Deploy Persistent Infrastructure
     needs: release
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./infra
+        working-directory: ./infra/persistent
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v1
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: OpenTofu Init
+      run: tofu init
+
+    - name: OpenTofu Format
+      run: tofu fmt -check
+
+    - name: OpenTofu Plan
+      env:
+        TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+      run: tofu plan -input=false
+
+    - name: OpenTofu Apply
+      if: github.ref == 'refs/heads/master'
+      env:
+        TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
+      run: tofu apply -auto-approve -input=false
+
+  teardown:
+    name: Deploy Application Infrastructure
+    needs: [release, persistent]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra/teardown
     outputs:
       private_subnets: ${{ steps.tf-outputs.outputs.private_subnets }}
       security_group_id: ${{ steps.tf-outputs.outputs.security_group_id }}
@@ -74,9 +115,6 @@ jobs:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
         TF_VAR_image_tag: ${{ needs.release.outputs.version }}
-        TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-        TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-        TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
       run: tofu plan -input=false
 
     - name: OpenTofu Apply
@@ -85,9 +123,6 @@ jobs:
         TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
         TF_VAR_image_tag: ${{ needs.release.outputs.version }}
-        TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-        TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-        TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
       run: tofu apply -auto-approve -input=false
 
     - name: Export Terraform Outputs
@@ -98,7 +133,7 @@ jobs:
         echo "security_group_id=$(tofu output -raw ecs_tasks_security_group_id)" >> $GITHUB_OUTPUT
 
   build:
-    needs: [opentofu, release]
+    needs: [persistent, teardown, release]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     strategy:
@@ -145,7 +180,7 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
   migrate:
-    needs: [opentofu, build]
+    needs: [teardown, build]
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
@@ -157,8 +192,8 @@ jobs:
 
     - name: Run Database Migrations
       env:
-        SUBNETS: ${{ needs.opentofu.outputs.private_subnets }}
-        SECURITY_GROUP: ${{ needs.opentofu.outputs.security_group_id }}
+        SUBNETS: ${{ needs.teardown.outputs.private_subnets }}
+        SECURITY_GROUP: ${{ needs.teardown.outputs.security_group_id }}
       run: |
         TASK_ARN=$(aws ecs run-task \
           --cluster collm-cluster \

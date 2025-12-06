@@ -22,8 +22,3 @@ resource "aws_sqs_queue" "adjudication_dlq" {
 
   tags = local.tags
 }
-
-# Output the URL so we can inject it into our app
-output "sqs_queue_url" {
-  value = aws_sqs_queue.adjudication_queue.url
-}

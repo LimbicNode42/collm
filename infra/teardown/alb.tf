@@ -57,7 +57,7 @@ resource "aws_lb_target_group" "user_service" {
   target_type = "ip"
 
   health_check {
-    path                = "/health" # Assuming there is a health check or root endpoint
+    path                = "/health"
     healthy_threshold   = 2
     unhealthy_threshold = 10
   }
@@ -111,9 +111,6 @@ resource "aws_lb_listener" "http" {
 }
 
 # Rule to route /api/user/* to user-service
-# Note: The frontend currently calls /register and /login directly on the user service port.
-# We should probably map /api/auth/* to the user service.
-# For now, let's route specific paths.
 resource "aws_lb_listener_rule" "user_service_users" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 110
@@ -168,7 +165,6 @@ resource "aws_lb_listener_rule" "message_service" {
   }
 }
 
-// Rule to route /message/* to message-service
 resource "aws_lb_listener_rule" "message_service_get" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 121
@@ -191,7 +187,6 @@ resource "aws_lb_listener_rule" "message_service_get" {
   }
 }
 
-// Rule to route /nodes* to core-service
 resource "aws_lb_listener_rule" "core_service_nodes" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 130

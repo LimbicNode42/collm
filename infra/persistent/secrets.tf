@@ -1,6 +1,6 @@
 # Secrets Manager for LLM API Keys
 resource "aws_secretsmanager_secret" "llm_keys" {
-  name                    = "${local.name}-llm-keys"
+  name                    = "${local.name}-llm-keys-v2"
   description             = "API keys for LLM providers (OpenAI, Anthropic, etc.)"
   recovery_window_in_days = 7
 
@@ -37,10 +37,4 @@ resource "aws_iam_policy" "secrets_access" {
   })
 
   tags = local.tags
-}
-
-# Attach the policy to the ECS task role
-resource "aws_iam_role_policy_attachment" "ecs_task_secrets_policy" {
-  role       = aws_iam_role.ecs_task_role.name
-  policy_arn = aws_iam_policy.secrets_access.arn
 }

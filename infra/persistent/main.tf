@@ -9,12 +9,11 @@ terraform {
   # Remote state in S3 with DynamoDB locking
   backend "s3" {
     bucket         = "collm-terraform-state-prod-001"
-    key            = "dev/terraform.tfstate"
+    key            = "persistent/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "collm-terraform-lock"
   }
-
 }
 
 provider "aws" {
@@ -28,7 +27,6 @@ locals {
   tags = {
     Project     = "collm"
     Environment = "dev"
-    ManagedBy   = "opentofu"
-    Repository  = "https://github.com/LimbicNode42/collm"
+    Workspace   = "persistent"
   }
 }

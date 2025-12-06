@@ -116,13 +116,13 @@ jobs:
           echo "✅ All tasks stopped"
 
   teardown:
-    name: Destroy Infrastructure
+    name: Destroy Application Infrastructure
     needs: [validate, stop-services]
     if: always() && needs.validate.outputs.confirmed == 'true' && needs.stop-services.result == 'success'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./infra
+        working-directory: ./infra/teardown
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -144,9 +144,6 @@ jobs:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
           TF_VAR_image_tag: "latest"
-          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
         run: |
           echo "Planning infrastructure destruction..."
           tofu plan -destroy -out=destroy.tfplan -input=false
@@ -156,11 +153,9 @@ jobs:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_app_db_password: ${{ secrets.APP_DB_PASSWORD }}
           TF_VAR_image_tag: "latest"
-          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-          TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          TF_VAR_google_api_key: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          echo "🚨 DESTROYING INFRASTRUCTURE 🚨"
+          echo "🚨 DESTROYING APPLICATION INFRASTRUCTURE 🚨"
+          echo "Note: Persistent resources (IAM, ECR, Secrets) will be preserved"
           
           if [ "${{ inputs.force_destroy }}" == "true" ]; then
             echo "Force destroy enabled - removing deletion protection..."
@@ -170,23 +165,10 @@ jobs:
             tofu apply destroy.tfplan
           fi
 
-      - name: Clean up ECR repositories
-        continue-on-error: true
+      - name: ECR repositories preserved
         run: |
-          echo "Cleaning up ECR repositories..."
-          
-          REPOS=(
-            "collm-web"
-            "collm-user-service"
-            "collm-core-service" 
-            "collm-message-service"
-            "collm-migrator"
-          )
-          
-          for repo in "${REPOS[@]}"; do
-            echo "Deleting ECR repository: $repo"
-            aws ecr delete-repository --repository-name "$repo" --force || echo "Repository $repo not found"
-          done
+          echo "✅ ECR repositories preserved in persistent workspace"
+          echo "Container images remain available for future deployments"
 
   cleanup:
     name: Final Cleanup
@@ -231,8 +213,9 @@ jobs:
           echo ""
           echo "Summary:"
           echo "✅ ECS services stopped"
-          echo "✅ Infrastructure destroyed via Terraform"
-          echo "✅ ECR repositories cleaned up"
+          echo "✅ Application infrastructure destroyed"
+          echo "✅ ECR repositories preserved"
+          echo "✅ IAM roles and secrets preserved"
           echo "✅ Orphaned resources cleaned up"
           
           if [ "${{ inputs.backup_data }}" == "true" ]; then
