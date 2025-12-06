@@ -44,3 +44,13 @@ output "sqs_queue_url" {
   description = "URL of the SQS queue"
   value       = aws_sqs_queue.adjudication_queue.url
 }
+
+output "cloudfront_domain_name" {
+  description = "The domain name of the CloudFront distribution"
+  value       = aws_cloudfront_distribution.main.domain_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "The identifier for the CloudFront distribution"
+  value       = aws_cloudfront_distribution.main.id
+}
