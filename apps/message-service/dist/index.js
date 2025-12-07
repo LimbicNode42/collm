@@ -9,6 +9,40 @@ const queue_1 = require("./services/queue");
 const fastify = (0, fastify_1.default)({
     logger: true
 });
+fastify.get('/health', async () => {
+    return { status: 'ok' };
+});
+fastify.get('/queue/pop', async (request, reply) => {
+    try {
+        const message = await queue_1.messageQueue.dequeue();
+        if (message) {
+            return reply.send({ success: true, message });
+        }
+        else {
+            return reply.code(404).send({ success: false, error: 'Queue is empty' });
+        }
+    }
+    catch (error) {
+        request.log.error(error);
+        return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+});
+fastify.get('/message/:id', async (request, reply) => {
+    const { id } = request.params;
+    try {
+        const message = await database_1.prismaCore.message.findUnique({
+            where: { id }
+        });
+        if (!message) {
+            return reply.code(404).send({ error: 'Message not found' });
+        }
+        return reply.send({ success: true, message });
+    }
+    catch (error) {
+        request.log.error(error);
+        return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+});
 fastify.post('/message', async (request, reply) => {
     const body = request.body;
     const { userId, nodeId, content, targetNodeVersion } = body;
@@ -30,6 +64,7 @@ fastify.post('/message', async (request, reply) => {
             nodeId,
             targetNodeVersion,
             content,
+            userId,
             timestamp: Date.now(),
         };
         await queue_1.messageQueue.enqueue(queueMessage);

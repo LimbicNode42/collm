@@ -1,5 +1,5 @@
 import { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
-import { QueueMessage } from '@collm/types';
+import { QueueMessage } from '../types/domain';
 
 export interface IMessageQueue {
   enqueue(message: QueueMessage): Promise<void>;

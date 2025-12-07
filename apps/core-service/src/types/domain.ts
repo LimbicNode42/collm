@@ -1,10 +1,5 @@
-export interface User {
-  id: string;
-  email: string;
-  name?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Domain models for the Core Service
+// These are internal to this service and should not be shared with other services
 
 export interface Node {
   id: string;
@@ -48,5 +43,6 @@ export interface QueueMessage {
   nodeId: string;
   targetNodeVersion: number;
   content: string;
-  timestamp: number;
+  userId: string;
+  timestamp?: number;
 }

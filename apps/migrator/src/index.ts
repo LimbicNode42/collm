@@ -47,12 +47,29 @@ async function createDatabaseIfNotExists(connectionString: string) {
 }
 
 async function runMigrations() {
-  const userDbUrl = process.env.DATABASE_URL_USER;
-  const coreDbUrl = process.env.DATABASE_URL_CORE;
+  // Try to get the URLs from the old format first (for backward compatibility)
+  let userDbUrl = process.env.DATABASE_URL_USER;
+  let coreDbUrl = process.env.DATABASE_URL_CORE;
 
+  // If not found, construct from the new component format
   if (!userDbUrl || !coreDbUrl) {
-    console.error("Missing DATABASE_URL_USER or DATABASE_URL_CORE environment variables.");
-    process.exit(1);
+    const dbHost = process.env.DB_HOST;
+    const dbPort = process.env.DB_PORT || '5432';
+    const dbUsername = process.env.DB_USERNAME;
+    const dbPassword = process.env.DB_PASSWORD;
+
+    if (!dbHost || !dbUsername || !dbPassword) {
+      console.error("Missing database environment variables. Need either:");
+      console.error("1. DATABASE_URL_USER and DATABASE_URL_CORE, or");
+      console.error("2. DB_HOST, DB_USERNAME, DB_PASSWORD (and optionally DB_PORT)");
+      process.exit(1);
+    }
+
+    // Construct the database URLs
+    userDbUrl = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_user`;
+    coreDbUrl = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_core`;
+    
+    console.log("Constructed database URLs from component environment variables");
   }
 
   console.log("Environment check:");

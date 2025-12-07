@@ -1,5 +1,5 @@
 import { prismaUser } from '@collm/database';
-import { User } from '@collm/types';
+import { User } from '../types/domain';
 import { hash, compare } from 'bcryptjs';
 
 export interface IUserService {

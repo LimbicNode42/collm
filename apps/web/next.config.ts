@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@collm/types", "@collm/database"],
+  transpilePackages: ["@collm/database"],
   output: "standalone",
 };
 

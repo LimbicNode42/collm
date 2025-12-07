@@ -36,6 +36,23 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CoreTypes = exports.UserTypes = exports.prismaCore = exports.prismaUser = void 0;
 const user_client_1 = require("../generated/user-client");
 const core_client_1 = require("../generated/core-client");
+// Ensure DATABASE_URL_USER and DATABASE_URL_CORE are set
+// If not, construct them from component environment variables
+if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
+    const dbHost = process.env.DB_HOST;
+    const dbPort = process.env.DB_PORT || '5432';
+    const dbUsername = process.env.DB_USERNAME;
+    const dbPassword = process.env.DB_PASSWORD;
+    if (dbHost && dbUsername && dbPassword) {
+        if (!process.env.DATABASE_URL_USER) {
+            process.env.DATABASE_URL_USER = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_user`;
+        }
+        if (!process.env.DATABASE_URL_CORE) {
+            process.env.DATABASE_URL_CORE = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_core`;
+        }
+        console.log('[Database] Constructed database URLs from component environment variables');
+    }
+}
 const globalForPrisma = global;
 exports.prismaUser = globalForPrisma.prismaUser ||
     new user_client_1.PrismaClient({

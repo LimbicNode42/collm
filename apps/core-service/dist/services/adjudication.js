@@ -4,7 +4,7 @@ exports.adjudicationEngine = exports.LLMAdjudicationEngine = void 0;
 const llm_1 = require("./llm");
 class LLMAdjudicationEngine {
     async adjudicate(message, node) {
-        console.log(`[AdjudicationEngine] Evaluating message ${message.id} against node ${node.id} (v${node.version})`);
+        console.log(`[AdjudicationEngine] Evaluating message ${message.id} against node ${node.id} (v${node.version}) using model "${node.model}"`);
         const prompt = `
 You are an impartial adjudicator for a collaborative conversation.
 Your goal is to determine if a new message is relevant to the current state of the conversation and if it provides new information (is not stale).
@@ -27,8 +27,9 @@ Respond with a JSON object in the following format:
   "score": number (0-1 confidence score)
 }
     `;
+        const systemPrompt = "You are an expert conversation moderator. Always respond with valid JSON in the exact format requested.";
         try {
-            const response = await llm_1.llmService.generateCompletion(prompt);
+            const response = await llm_1.llmService.generateCompletion(prompt, systemPrompt, node.model);
             const result = JSON.parse(response.content);
             return {
                 messageId: message.id,

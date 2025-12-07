@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { prismaCore } from '@collm/database';
 import { messageQueue } from './services/queue';
-import { QueueMessage } from '@collm/types';
+import { QueueMessage } from './types/domain';
 
 const fastify = Fastify({
   logger: true
@@ -70,6 +70,7 @@ fastify.post('/message', async (request, reply) => {
       nodeId,
       targetNodeVersion,
       content,
+      userId,
       timestamp: Date.now(),
     };
 

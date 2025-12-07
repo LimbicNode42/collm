@@ -4,7 +4,7 @@ import { adjudicationEngine } from './services/adjudication';
 import { coreEngine } from './services/core';
 import { llmService } from './services/llm';
 import { prismaCore } from '@collm/database';
-import { MessageStatus } from '@collm/types';
+import { MessageStatus } from './types/domain';
 
 // HTTP Server for Node Management
 const fastify = Fastify({

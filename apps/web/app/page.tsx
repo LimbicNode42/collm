@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { User } from '@collm/types';
+import { User } from '../types/api';
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);

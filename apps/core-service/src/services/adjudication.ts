@@ -1,4 +1,4 @@
-import { AdjudicationResult, Node, Message } from '@collm/types';
+import { AdjudicationResult, Node, Message } from '../types/domain';
 import { llmService } from './llm';
 
 export interface IAdjudicationEngine {

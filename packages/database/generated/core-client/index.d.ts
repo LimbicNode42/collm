@@ -984,6 +984,7 @@ export namespace Prisma {
     topic: string | null
     description: string | null
     state: string | null
+    model: string | null
     version: number | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -994,6 +995,7 @@ export namespace Prisma {
     topic: string | null
     description: string | null
     state: string | null
+    model: string | null
     version: number | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -1004,6 +1006,7 @@ export namespace Prisma {
     topic: number
     description: number
     state: number
+    model: number
     version: number
     createdAt: number
     updatedAt: number
@@ -1024,6 +1027,7 @@ export namespace Prisma {
     topic?: true
     description?: true
     state?: true
+    model?: true
     version?: true
     createdAt?: true
     updatedAt?: true
@@ -1034,6 +1038,7 @@ export namespace Prisma {
     topic?: true
     description?: true
     state?: true
+    model?: true
     version?: true
     createdAt?: true
     updatedAt?: true
@@ -1044,6 +1049,7 @@ export namespace Prisma {
     topic?: true
     description?: true
     state?: true
+    model?: true
     version?: true
     createdAt?: true
     updatedAt?: true
@@ -1141,6 +1147,7 @@ export namespace Prisma {
     topic: string
     description: string | null
     state: string
+    model: string
     version: number
     createdAt: Date
     updatedAt: Date
@@ -1170,6 +1177,7 @@ export namespace Prisma {
     topic?: boolean
     description?: boolean
     state?: boolean
+    model?: boolean
     version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1182,6 +1190,7 @@ export namespace Prisma {
     topic?: boolean
     description?: boolean
     state?: boolean
+    model?: boolean
     version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1192,6 +1201,7 @@ export namespace Prisma {
     topic?: boolean
     description?: boolean
     state?: boolean
+    model?: boolean
     version?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -1213,6 +1223,7 @@ export namespace Prisma {
       topic: string
       description: string | null
       state: string
+      model: string
       version: number
       createdAt: Date
       updatedAt: Date
@@ -1614,6 +1625,7 @@ export namespace Prisma {
     readonly topic: FieldRef<"Node", 'String'>
     readonly description: FieldRef<"Node", 'String'>
     readonly state: FieldRef<"Node", 'String'>
+    readonly model: FieldRef<"Node", 'String'>
     readonly version: FieldRef<"Node", 'Int'>
     readonly createdAt: FieldRef<"Node", 'DateTime'>
     readonly updatedAt: FieldRef<"Node", 'DateTime'>
@@ -2975,6 +2987,7 @@ export namespace Prisma {
     topic: 'topic',
     description: 'description',
     state: 'state',
+    model: 'model',
     version: 'version',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -3092,6 +3105,7 @@ export namespace Prisma {
     topic?: StringFilter<"Node"> | string
     description?: StringNullableFilter<"Node"> | string | null
     state?: StringFilter<"Node"> | string
+    model?: StringFilter<"Node"> | string
     version?: IntFilter<"Node"> | number
     createdAt?: DateTimeFilter<"Node"> | Date | string
     updatedAt?: DateTimeFilter<"Node"> | Date | string
@@ -3103,6 +3117,7 @@ export namespace Prisma {
     topic?: SortOrder
     description?: SortOrderInput | SortOrder
     state?: SortOrder
+    model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -3117,6 +3132,7 @@ export namespace Prisma {
     topic?: StringFilter<"Node"> | string
     description?: StringNullableFilter<"Node"> | string | null
     state?: StringFilter<"Node"> | string
+    model?: StringFilter<"Node"> | string
     version?: IntFilter<"Node"> | number
     createdAt?: DateTimeFilter<"Node"> | Date | string
     updatedAt?: DateTimeFilter<"Node"> | Date | string
@@ -3128,6 +3144,7 @@ export namespace Prisma {
     topic?: SortOrder
     description?: SortOrderInput | SortOrder
     state?: SortOrder
+    model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -3146,6 +3163,7 @@ export namespace Prisma {
     topic?: StringWithAggregatesFilter<"Node"> | string
     description?: StringNullableWithAggregatesFilter<"Node"> | string | null
     state?: StringWithAggregatesFilter<"Node"> | string
+    model?: StringWithAggregatesFilter<"Node"> | string
     version?: IntWithAggregatesFilter<"Node"> | number
     createdAt?: DateTimeWithAggregatesFilter<"Node"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Node"> | Date | string
@@ -3223,6 +3241,7 @@ export namespace Prisma {
     topic: string
     description?: string | null
     state: string
+    model?: string
     version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -3234,6 +3253,7 @@ export namespace Prisma {
     topic: string
     description?: string | null
     state: string
+    model?: string
     version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -3245,6 +3265,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3256,6 +3277,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3267,6 +3289,7 @@ export namespace Prisma {
     topic: string
     description?: string | null
     state: string
+    model?: string
     version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -3277,6 +3300,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3287,6 +3311,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3433,6 +3458,7 @@ export namespace Prisma {
     topic?: SortOrder
     description?: SortOrder
     state?: SortOrder
+    model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -3447,6 +3473,7 @@ export namespace Prisma {
     topic?: SortOrder
     description?: SortOrder
     state?: SortOrder
+    model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -3457,6 +3484,7 @@ export namespace Prisma {
     topic?: SortOrder
     description?: SortOrder
     state?: SortOrder
+    model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -3849,6 +3877,7 @@ export namespace Prisma {
     topic: string
     description?: string | null
     state: string
+    model?: string
     version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -3859,6 +3888,7 @@ export namespace Prisma {
     topic: string
     description?: string | null
     state: string
+    model?: string
     version?: number
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -3885,6 +3915,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3895,6 +3926,7 @@ export namespace Prisma {
     topic?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     state?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string

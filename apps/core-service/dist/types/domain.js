@@ -9,3 +9,4 @@ var MessageStatus;
     MessageStatus["REJECTED"] = "REJECTED";
     MessageStatus["STALE"] = "STALE";
 })(MessageStatus || (exports.MessageStatus = MessageStatus = {}));
+//# sourceMappingURL=domain.js.map

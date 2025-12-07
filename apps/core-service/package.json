@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.936.0",
-    "@collm/types": "*",
     "@collm/database": "*",
     "fastify": "^4.0.0",
     "@fastify/cors": "^9.0.0"

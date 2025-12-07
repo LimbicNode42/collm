@@ -1,7 +1,7 @@
-import { Node, Message } from '@collm/types';
+import { Node, Message } from '../types/domain';
 import { llmService } from './llm';
 import { vectorStore } from './vectorStore';
-import { prismaCore } from '@collm/database';
+import { prismaCore, CoreTypes } from '@collm/database';
 
 export interface ICoreEngine {
   /**
@@ -63,7 +63,7 @@ export class LLMCoreEngine implements ICoreEngine {
   async updateNodeState(nodeId: string, newMessages: Message[]): Promise<Node> {
     const node = await prismaCore.node.findUnique({
       where: { id: nodeId }
-    });
+    }) as CoreTypes.Node | null;
 
     if (!node) {
       throw new Error(`Node ${nodeId} not found`);
@@ -90,7 +90,7 @@ Task: Update the conversation state to incorporate the new information. Keep the
         state: response.content,
         version: { increment: 1 },
       }
-    });
+    }) as CoreTypes.Node;
     
     const domainNode: Node = {
       id: updatedNode.id,
@@ -109,7 +109,7 @@ Task: Update the conversation state to incorporate the new information. Keep the
   async getNode(nodeId: string): Promise<Node | null> {
     const node = await prismaCore.node.findUnique({
       where: { id: nodeId }
-    });
+    }) as CoreTypes.Node | null;
 
     if (!node) return null;
 
@@ -128,7 +128,7 @@ Task: Update the conversation state to incorporate the new information. Keep the
   async listNodes(): Promise<Node[]> {
     const nodes = await prismaCore.node.findMany({
       orderBy: { updatedAt: 'desc' }
-    });
+    }) as CoreTypes.Node[];
 
     return nodes.map(node => ({
       id: node.id,
