@@ -72,6 +72,12 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Attach secrets access policy to execution role (needed to pull secrets at startup)
+resource "aws_iam_role_policy_attachment" "ecs_execution_secrets_policy" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = aws_iam_policy.secrets_access.arn
+}
+
 resource "aws_iam_role" "ecs_task_role" {
   name = "${local.name}-ecs-task-role"
 
@@ -88,4 +94,10 @@ resource "aws_iam_role" "ecs_task_role" {
     ]
   })
   tags = local.tags
+}
+
+# Attach secrets access policy to task role (needed for runtime access to secrets)
+resource "aws_iam_role_policy_attachment" "ecs_task_secrets_policy" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.secrets_access.arn
 }
