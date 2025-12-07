@@ -163,16 +163,30 @@ resource "aws_ecs_task_definition" "message_service" {
           value = aws_sqs_queue.adjudication_queue.url
         },
         {
-          name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+          name  = "DB_HOST"
+          value = module.db.db_instance_address
         },
         {
-          name  = "DATABASE_URL_CORE"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+          name  = "DB_PORT"
+          value = "5432"
+        },
+        {
+          name  = "DB_NAME"
+          value = "collm_core"
         },
         {
           name  = "AWS_REGION"
           value = local.region
+        }
+      ]
+      secrets = [
+        {
+          name      = "DB_USERNAME"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:username::"
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:password::"
         }
       ]
       logConfiguration = {
@@ -233,12 +247,26 @@ resource "aws_ecs_task_definition" "user_service" {
       ]
       environment = [
         {
-          name  = "DATABASE_URL"
-          value = "postgresql://user_service_app:${urlencode(var.app_db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
+          name  = "DB_HOST"
+          value = module.db.db_instance_address
         },
         {
-          name  = "DATABASE_URL_USER"
-          value = "postgresql://user_service_app:${urlencode(var.app_db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
+          name  = "DB_PORT"
+          value = "5432"
+        },
+        {
+          name  = "DB_NAME"
+          value = "collm_users"
+        }
+      ]
+      secrets = [
+        {
+          name      = "DB_USERNAME"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:username::"
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:password::"
         }
       ]
       logConfiguration = {
@@ -304,12 +332,16 @@ resource "aws_ecs_task_definition" "core_service" {
           value = aws_sqs_queue.adjudication_queue.url
         },
         {
-          name  = "DATABASE_URL"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+          name  = "DB_HOST"
+          value = module.db.db_instance_address
         },
         {
-          name  = "DATABASE_URL_CORE"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+          name  = "DB_PORT"
+          value = "5432"
+        },
+        {
+          name  = "DB_NAME"
+          value = "collm_core"
         },
         {
           name  = "AWS_REGION"
@@ -329,6 +361,14 @@ resource "aws_ecs_task_definition" "core_service" {
         }
       ]
       secrets = [
+        {
+          name      = "DB_USERNAME"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:username::"
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:password::"
+        },
         {
           name      = "OPENAI_API_KEY"
           valueFrom = "${data.terraform_remote_state.persistent.outputs.secrets_manager_arn}:OPENAI_API_KEY::"
@@ -394,16 +434,26 @@ resource "aws_ecs_task_definition" "migrator" {
       image = "${local.ecr_repositories.migrator}:${var.image_tag}"
       environment = [
         {
-          name  = "DATABASE_URL_USER"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_users?sslmode=no-verify"
+          name  = "DB_HOST"
+          value = module.db.db_instance_address
         },
         {
-          name  = "DATABASE_URL_CORE"
-          value = "postgresql://${module.db.db_instance_username}:${urlencode(var.db_password)}@${module.db.db_instance_endpoint}/collm_core?sslmode=no-verify"
+          name  = "DB_PORT"
+          value = "5432"
         },
         {
           name  = "APP_USER_PASSWORD"
           value = var.app_db_password
+        }
+      ]
+      secrets = [
+        {
+          name      = "DB_USERNAME"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:username::"
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = "${module.db.db_instance_master_user_secret_arn}:password::"
         }
       ]
       logConfiguration = {

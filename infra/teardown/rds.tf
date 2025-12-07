@@ -12,10 +12,11 @@ module "db" {
   allocated_storage     = 20
   max_allocated_storage = 100
 
-  db_name  = "collm"
-  username = "collm_admin"
-  password = var.db_password
-  port     = 5432
+  db_name                       = "collm"
+  username                      = "collm_admin"
+  manage_master_user_password   = true
+  master_user_secret_kms_key_id = null # Use default KMS key
+  port                          = 5432
 
   # DB subnet group
   create_db_subnet_group = true
@@ -52,4 +53,11 @@ module "security_group" {
   ]
 
   tags = local.tags
+}
+
+# Output the secret ARN for ECS tasks to access
+output "db_master_user_secret_arn" {
+  description = "ARN of the RDS master user secret in Secrets Manager"
+  value       = module.db.db_instance_master_user_secret_arn
+  sensitive   = true
 }

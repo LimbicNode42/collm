@@ -20,6 +20,10 @@ provider "aws" {
   region = "us-east-1"
 }
 
+# Data sources for current AWS context
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 locals {
   name   = "collm"
   region = "us-east-1"

@@ -19,7 +19,7 @@ resource "aws_secretsmanager_secret_version" "llm_keys" {
 # IAM policy to allow ECS tasks to read secrets
 resource "aws_iam_policy" "secrets_access" {
   name        = "${local.name}-secrets-access"
-  description = "Allow ECS tasks to read LLM API keys from Secrets Manager"
+  description = "Allow ECS tasks to read LLM API keys and RDS credentials from Secrets Manager"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -30,7 +30,8 @@ resource "aws_iam_policy" "secrets_access" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          aws_secretsmanager_secret.llm_keys.arn
+          aws_secretsmanager_secret.llm_keys.arn,
+          "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:rds-db-credentials/*"
         ]
       }
     ]
