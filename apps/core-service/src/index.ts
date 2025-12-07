@@ -11,6 +11,12 @@ const fastify = Fastify({
   logger: true
 });
 
+// Add CORS support
+fastify.register(require('@fastify/cors'), {
+  origin: true, // Allow all origins for now
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+});
+
 // Health check
 fastify.get('/health', async (request, reply) => {
   try {
@@ -136,6 +142,10 @@ const startHttpServer = async () => {
     
     await fastify.listen({ port: 3003, host: '0.0.0.0' });
     console.log('[CoreService] HTTP server started on port 3003');
+    
+    // Log all registered routes for debugging
+    console.log('[CoreService] Registered routes:');
+    fastify.printRoutes();
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

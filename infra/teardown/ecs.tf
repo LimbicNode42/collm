@@ -474,7 +474,7 @@ resource "aws_ecs_service" "migrator" {
   name            = "${local.name}-migrator"
   cluster         = module.ecs.cluster_id
   task_definition = aws_ecs_task_definition.migrator.arn
-  desired_count   = 1
+  desired_count   = 0 # Set to 0 - run manually when migrations needed
   launch_type     = "FARGATE"
 
   network_configuration {
