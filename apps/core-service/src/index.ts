@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { messageQueue } from './services/queue';
 import { adjudicationEngine } from './services/adjudication';
 import { coreEngine } from './services/core';
+import { llmService } from './services/llm';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from '@collm/types';
 
@@ -70,6 +71,41 @@ fastify.get('/nodes/:id', async (request, reply) => {
   } catch (error) {
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+// LLM testing endpoint
+fastify.post('/llm/test', async (request, reply) => {
+  const body = request.body as any;
+  const { prompt, systemPrompt, model } = body;
+
+  if (!prompt) {
+    return reply.code(400).send({ error: 'Prompt is required' });
+  }
+
+  try {
+    const startTime = Date.now();
+    const response = await llmService.generateCompletion(
+      prompt,
+      systemPrompt,
+      model || 'claude-sonnet-4-5-20250929'
+    );
+    const duration = Date.now() - startTime;
+
+    return reply.send({ 
+      success: true, 
+      content: response.content,
+      usage: response.usage,
+      model: model || 'claude-sonnet-4-5-20250929',
+      duration,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    request.log.error('LLM test error:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to generate LLM response',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

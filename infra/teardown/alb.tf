@@ -202,3 +202,19 @@ resource "aws_lb_listener_rule" "core_service_nodes" {
     }
   }
 }
+
+resource "aws_lb_listener_rule" "core_service_llm" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 135
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.core_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/llm", "/llm/*"]
+    }
+  }
+}

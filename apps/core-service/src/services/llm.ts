@@ -259,5 +259,5 @@ export class MockLLMService implements ILLMService {
 }
 
 // Use real LLM service if API keys are available, otherwise fall back to mock
-const hasApiKeys = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
+const hasApiKeys = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GOOGLE_API_KEY;
 export const llmService: ILLMService = hasApiKeys ? new RealLLMService() : new MockLLMService();
