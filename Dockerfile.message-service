@@ -16,9 +16,6 @@ WORKDIR /app/packages/database
 RUN sed -i 's/provider[[:space:]]*=[[:space:]]*"sqlite"/provider = "postgresql"/g' prisma/user.prisma
 RUN npm run generate
 RUN npm run build
-# Build types
-WORKDIR /app/packages/types
-RUN npm run build
 # Build message service
 WORKDIR /app/apps/message-service
 RUN npm run build

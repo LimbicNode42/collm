@@ -10,7 +10,6 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/database/package.json ./packages/database/
-COPY packages/types/package.json ./packages/types/
 
 # Install dependencies
 RUN npm ci
