@@ -311,17 +311,46 @@ export default function TestPage() {
     const [description, setDescription] = useState('Exploring the fundamentals of AI and machine learning');
     const [message, setMessage] = useState('What are neural networks?');
     const [conversationHistory, setConversationHistory] = useState<any[]>([]);
+    const [memoryResults, setMemoryResults] = useState<Record<string, any>>({});
+    const [memoryLoading, setMemoryLoading] = useState<Record<string, boolean>>({});
+
+    const memoryApiCall = async (key: string, url: string, options?: RequestInit) => {
+      setMemoryLoading(prev => ({ ...prev, [key]: true }));
+      try {
+        const response = await fetch(url, options);
+        const data = await response.json();
+        const result = { 
+          status: response.status, 
+          success: response.ok, 
+          data,
+          timestamp: new Date().toLocaleTimeString()
+        };
+        setMemoryResults(prev => ({ ...prev, [key]: result }));
+        return result;
+      } catch (error) {
+        const result = { 
+          status: 0, 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toLocaleTimeString()
+        };
+        setMemoryResults(prev => ({ ...prev, [key]: result }));
+        return result;
+      } finally {
+        setMemoryLoading(prev => ({ ...prev, [key]: false }));
+      }
+    };
 
     const createTestNode = async () => {
-      await apiCall('createMemoryNode', '/api/nodes', {
+      const result = await memoryApiCall('createMemoryNode', '/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, description })
       });
       
       // Extract node ID from result for further testing
-      if (results.createMemoryNode?.data?.id) {
-        setNodeId(results.createMemoryNode.data.id);
+      if (result.success && 'data' in result && result.data?.id) {
+        setNodeId(result.data.id);
       }
     };
 
@@ -331,7 +360,7 @@ export default function TestPage() {
         return;
       }
       
-      await apiCall('sendMemoryMessage', '/api/messages', {
+      const result = await memoryApiCall('sendMemoryMessage', '/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -348,6 +377,15 @@ export default function TestPage() {
         timestamp: new Date().toLocaleTimeString()
       }]);
       
+      // Add response if available
+      if (result.success && 'data' in result && result.data?.response) {
+        setConversationHistory(prev => [...prev, {
+          type: 'assistant',
+          content: result.data.response,
+          timestamp: new Date().toLocaleTimeString()
+        }]);
+      }
+      
       setMessage('');
     };
 
@@ -357,7 +395,7 @@ export default function TestPage() {
         return;
       }
       
-      await apiCall('getMemoryNode', `/api/nodes/${nodeId}`);
+      await memoryApiCall('getMemoryNode', `/api/nodes/${nodeId}`);
     };
 
     const testMessages = [
@@ -394,10 +432,10 @@ export default function TestPage() {
           </div>
           <button
             onClick={createTestNode}
-            disabled={loading.createMemoryNode}
+            disabled={memoryLoading.createMemoryNode}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 mr-2"
           >
-            {loading.createMemoryNode ? 'Creating...' : 'Create Node'}
+            {memoryLoading.createMemoryNode ? 'Creating...' : 'Create Node'}
           </button>
           {nodeId && (
             <span className="text-sm text-gray-600">Node ID: {nodeId}</span>
@@ -417,17 +455,17 @@ export default function TestPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={sendMessage}
-                disabled={loading.sendMemoryMessage || !nodeId}
+                disabled={memoryLoading.sendMemoryMessage || !nodeId}
                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
               >
-                {loading.sendMemoryMessage ? 'Sending...' : 'Send Message'}
+                {memoryLoading.sendMemoryMessage ? 'Sending...' : 'Send Message'}
               </button>
               <button
                 onClick={getNodeMemory}
-                disabled={loading.getMemoryNode || !nodeId}
+                disabled={memoryLoading.getMemoryNode || !nodeId}
                 className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
               >
-                {loading.getMemoryNode ? 'Loading...' : 'View Memory State'}
+                {memoryLoading.getMemoryNode ? 'Loading...' : 'View Memory State'}
               </button>
             </div>
             
@@ -463,38 +501,48 @@ export default function TestPage() {
           )}
         </div>
 
-        {results.createMemoryNode && (
+        {memoryResults.createMemoryNode && (
           <div className="bg-white p-6 rounded-lg shadow text-black">
             <h4 className="font-medium mb-2">Node Creation Result:</h4>
-            <ResultDisplay results={[results.createMemoryNode]} />
+            <div className={`p-3 rounded text-sm ${memoryResults.createMemoryNode.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`font-medium ${memoryResults.createMemoryNode.success ? 'text-green-800' : 'text-red-800'}`}>
+                  Status: {memoryResults.createMemoryNode.status} {memoryResults.createMemoryNode.success ? '✅' : '❌'}
+                </span>
+                <span className="text-gray-500">{memoryResults.createMemoryNode.timestamp}</span>
+              </div>
+              <pre className="whitespace-pre-wrap text-gray-700">
+                {JSON.stringify(memoryResults.createMemoryNode.data || memoryResults.createMemoryNode.error, null, 2)}
+              </pre>
+            </div>
           </div>
         )}
 
-        {results.getMemoryNode && (
+        {memoryResults.getMemoryNode && (
           <div className="bg-white p-6 rounded-lg shadow text-black">
             <h4 className="font-medium mb-2">Memory State:</h4>
             <div className="bg-gray-50 p-4 rounded text-sm">
-              {results.getMemoryNode.data?.memory && (
+              {memoryResults.getMemoryNode.data?.memory && (
                 <div className="space-y-3">
                   <div>
                     <strong>Core Context:</strong>
-                    <p className="mt-1 text-gray-700">{results.getMemoryNode.data.memory.coreContext}</p>
+                    <p className="mt-1 text-gray-700">{memoryResults.getMemoryNode.data.memory.coreContext}</p>
                   </div>
                   <div>
                     <strong>Working Memory:</strong>
-                    <p className="mt-1 text-gray-700">{results.getMemoryNode.data.memory.workingMemory}</p>
+                    <p className="mt-1 text-gray-700">{memoryResults.getMemoryNode.data.memory.workingMemory}</p>
                   </div>
                   <div>
-                    <strong>Key Facts ({results.getMemoryNode.data.memory.keyFacts?.length || 0}):</strong>
+                    <strong>Key Facts ({memoryResults.getMemoryNode.data.memory.keyFacts?.length || 0}):</strong>
                     <ul className="mt-1 text-gray-700 list-disc list-inside">
-                      {results.getMemoryNode.data.memory.keyFacts?.map((fact: string, index: number) => (
+                      {memoryResults.getMemoryNode.data.memory.keyFacts?.map((fact: string, index: number) => (
                         <li key={index}>{fact}</li>
                       )) || <li>No key facts extracted yet</li>}
                     </ul>
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <span><strong>Messages:</strong> {results.getMemoryNode.data.memory.messageCount}</span>
-                    <span><strong>Last Summary:</strong> {results.getMemoryNode.data.memory.lastSummaryAt}</span>
+                    <span><strong>Messages:</strong> {memoryResults.getMemoryNode.data.memory.messageCount}</span>
+                    <span><strong>Last Summary:</strong> {memoryResults.getMemoryNode.data.memory.lastSummaryAt}</span>
                   </div>
                 </div>
               )}
@@ -502,10 +550,20 @@ export default function TestPage() {
           </div>
         )}
 
-        {results.sendMemoryMessage && (
+        {memoryResults.sendMemoryMessage && (
           <div className="bg-white p-6 rounded-lg shadow text-black">
             <h4 className="font-medium mb-2">Message Processing Result:</h4>
-            <ResultDisplay results={[results.sendMemoryMessage]} />
+            <div className={`p-3 rounded text-sm ${memoryResults.sendMemoryMessage.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`font-medium ${memoryResults.sendMemoryMessage.success ? 'text-green-800' : 'text-red-800'}`}>
+                  Status: {memoryResults.sendMemoryMessage.status} {memoryResults.sendMemoryMessage.success ? '✅' : '❌'}
+                </span>
+                <span className="text-gray-500">{memoryResults.sendMemoryMessage.timestamp}</span>
+              </div>
+              <pre className="whitespace-pre-wrap text-gray-700">
+                {JSON.stringify(memoryResults.sendMemoryMessage.data || memoryResults.sendMemoryMessage.error, null, 2)}
+              </pre>
+            </div>
           </div>
         )}
       </div>
