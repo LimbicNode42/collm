@@ -34,10 +34,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CoreTypes = exports.UserTypes = exports.prismaCore = exports.prismaUser = void 0;
-const user_client_1 = require("../generated/user-client");
-const core_client_1 = require("../generated/core-client");
-// Ensure DATABASE_URL_USER and DATABASE_URL_CORE are set
-// If not, construct them from component environment variables
+// Construct DATABASE_URL environment variables before any imports
+// This must happen before Prisma clients are instantiated
 if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
     const dbHost = process.env.DB_HOST;
     const dbPort = process.env.DB_PORT || '5432';
@@ -53,6 +51,8 @@ if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
         console.log('[Database] Constructed database URLs from component environment variables');
     }
 }
+const user_client_1 = require("../generated/user-client");
+const core_client_1 = require("../generated/core-client");
 const globalForPrisma = global;
 exports.prismaUser = globalForPrisma.prismaUser ||
     new user_client_1.PrismaClient({

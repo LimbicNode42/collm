@@ -1,5 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+// Construct DATABASE_URL environment variables before any imports
+// This must happen before Prisma tries to validate the schema
+if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
+    const dbHost = process.env.DB_HOST;
+    const dbPort = process.env.DB_PORT || '5432';
+    const dbUsername = process.env.DB_USERNAME;
+    const dbPassword = process.env.DB_PASSWORD;
+    if (dbHost && dbUsername && dbPassword) {
+        if (!process.env.DATABASE_URL_USER) {
+            process.env.DATABASE_URL_USER = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_user`;
+        }
+        if (!process.env.DATABASE_URL_CORE) {
+            process.env.DATABASE_URL_CORE = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_core`;
+        }
+        console.log('Constructed database URLs from component environment variables');
+    }
+}
 const pg_1 = require("pg");
 const child_process_1 = require("child_process");
 async function createDatabaseIfNotExists(connectionString) {
@@ -45,25 +62,12 @@ async function createDatabaseIfNotExists(connectionString) {
     }
 }
 async function runMigrations() {
-    // Try to get the URLs from the old format first (for backward compatibility)
-    let userDbUrl = process.env.DATABASE_URL_USER;
-    let coreDbUrl = process.env.DATABASE_URL_CORE;
-    // If not found, construct from the new component format
+    const userDbUrl = process.env.DATABASE_URL_USER;
+    const coreDbUrl = process.env.DATABASE_URL_CORE;
     if (!userDbUrl || !coreDbUrl) {
-        const dbHost = process.env.DB_HOST;
-        const dbPort = process.env.DB_PORT || '5432';
-        const dbUsername = process.env.DB_USERNAME;
-        const dbPassword = process.env.DB_PASSWORD;
-        if (!dbHost || !dbUsername || !dbPassword) {
-            console.error("Missing database environment variables. Need either:");
-            console.error("1. DATABASE_URL_USER and DATABASE_URL_CORE, or");
-            console.error("2. DB_HOST, DB_USERNAME, DB_PASSWORD (and optionally DB_PORT)");
-            process.exit(1);
-        }
-        // Construct the database URLs
-        userDbUrl = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_user`;
-        coreDbUrl = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_core`;
-        console.log("Constructed database URLs from component environment variables");
+        console.error("Missing DATABASE_URL_USER or DATABASE_URL_CORE environment variables.");
+        console.error("This should have been set at startup from component variables.");
+        process.exit(1);
     }
     console.log("Environment check:");
     console.log("DATABASE_URL_USER:", userDbUrl ? `Set (length: ${userDbUrl.length})` : "Not set");

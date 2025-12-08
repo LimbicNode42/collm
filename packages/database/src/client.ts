@@ -1,8 +1,5 @@
-import { PrismaClient as UserClient } from '../generated/user-client'
-import { PrismaClient as CoreClient } from '../generated/core-client'
-
-// Ensure DATABASE_URL_USER and DATABASE_URL_CORE are set
-// If not, construct them from component environment variables
+// Construct DATABASE_URL environment variables before any imports
+// This must happen before Prisma clients are instantiated
 if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
   const dbHost = process.env.DB_HOST;
   const dbPort = process.env.DB_PORT || '5432';
@@ -19,6 +16,9 @@ if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
     console.log('[Database] Constructed database URLs from component environment variables');
   }
 }
+
+import { PrismaClient as UserClient } from '../generated/user-client'
+import { PrismaClient as CoreClient } from '../generated/core-client'
 
 const globalForPrisma = global as unknown as { 
   prismaUser: UserClient,
