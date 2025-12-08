@@ -10,7 +10,7 @@ interface TestSection {
 }
 
 export default function TestPage() {
-  const [activeSection, setActiveSection] = useState<string>('user-management');
+  const [activeSection, setActiveSection] = useState<string>('api-routing');
   const [results, setResults] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
@@ -305,6 +305,213 @@ export default function TestPage() {
     );
   };
 
+  const MemoryTests = () => {
+    const [nodeId, setNodeId] = useState('');
+    const [topic, setTopic] = useState('Artificial Intelligence');
+    const [description, setDescription] = useState('Exploring the fundamentals of AI and machine learning');
+    const [message, setMessage] = useState('What are neural networks?');
+    const [conversationHistory, setConversationHistory] = useState<any[]>([]);
+
+    const createTestNode = async () => {
+      await apiCall('createMemoryNode', '/api/nodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, description })
+      });
+      
+      // Extract node ID from result for further testing
+      if (results.createMemoryNode?.data?.id) {
+        setNodeId(results.createMemoryNode.data.id);
+      }
+    };
+
+    const sendMessage = async () => {
+      if (!nodeId) {
+        alert('Please create a node first');
+        return;
+      }
+      
+      await apiCall('sendMemoryMessage', '/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          content: message,
+          nodeId,
+          userId: 'test-user-' + Date.now()
+        })
+      });
+      
+      // Add to conversation history for display
+      setConversationHistory(prev => [...prev, {
+        type: 'user',
+        content: message,
+        timestamp: new Date().toLocaleTimeString()
+      }]);
+      
+      setMessage('');
+    };
+
+    const getNodeMemory = async () => {
+      if (!nodeId) {
+        alert('Please create a node first');
+        return;
+      }
+      
+      await apiCall('getMemoryNode', `/api/nodes/${nodeId}`);
+    };
+
+    const testMessages = [
+      "What are neural networks?",
+      "How do they learn from data?",
+      "What's the difference between supervised and unsupervised learning?",
+      "Can you give me an example of deep learning?",
+      "How does backpropagation work?",
+      "What are some real-world applications?",
+      "Tell me about transformers in AI",
+      "How does attention mechanism work?",
+      "What are the challenges with large language models?",
+      "How can we make AI more ethical?"
+    ];
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white p-6 rounded-lg shadow text-black">
+          <h3 className="text-lg font-semibold mb-4">Node Creation & Memory Initialization</h3>
+          <div className="space-y-4 mb-4">
+            <input
+              placeholder="Topic (e.g., 'Artificial Intelligence')"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className="border rounded px-3 py-2 w-full"
+            />
+            <textarea
+              placeholder="Initial description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="border rounded px-3 py-2 w-full"
+              rows={2}
+            />
+          </div>
+          <button
+            onClick={createTestNode}
+            disabled={loading.createMemoryNode}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 mr-2"
+          >
+            {loading.createMemoryNode ? 'Creating...' : 'Create Node'}
+          </button>
+          {nodeId && (
+            <span className="text-sm text-gray-600">Node ID: {nodeId}</span>
+          )}
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow text-black">
+          <h3 className="text-lg font-semibold mb-4">Memory Testing & Conversation</h3>
+          <div className="space-y-4 mb-4">
+            <textarea
+              placeholder="Enter a message to test memory retention..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="border rounded px-3 py-2 w-full"
+              rows={2}
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={sendMessage}
+                disabled={loading.sendMemoryMessage || !nodeId}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+              >
+                {loading.sendMemoryMessage ? 'Sending...' : 'Send Message'}
+              </button>
+              <button
+                onClick={getNodeMemory}
+                disabled={loading.getMemoryNode || !nodeId}
+                className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading.getMemoryNode ? 'Loading...' : 'View Memory State'}
+              </button>
+            </div>
+            
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-2">Quick Test Messages:</h4>
+              <div className="flex flex-wrap gap-2">
+                {testMessages.map((msg, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setMessage(msg)}
+                    className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm"
+                  >
+                    {msg.length > 30 ? msg.substring(0, 30) + '...' : msg}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {conversationHistory.length > 0 && (
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-2">Conversation History:</h4>
+              <div className="max-h-40 overflow-y-auto space-y-2">
+                {conversationHistory.map((entry, index) => (
+                  <div key={index} className="text-sm">
+                    <span className="text-gray-500">[{entry.timestamp}]</span> 
+                    <span className="font-medium ml-2">{entry.type === 'user' ? 'User:' : 'AI:'}</span>
+                    <span className="ml-2">{entry.content}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {results.createMemoryNode && (
+          <div className="bg-white p-6 rounded-lg shadow text-black">
+            <h4 className="font-medium mb-2">Node Creation Result:</h4>
+            <ResultDisplay results={[results.createMemoryNode]} />
+          </div>
+        )}
+
+        {results.getMemoryNode && (
+          <div className="bg-white p-6 rounded-lg shadow text-black">
+            <h4 className="font-medium mb-2">Memory State:</h4>
+            <div className="bg-gray-50 p-4 rounded text-sm">
+              {results.getMemoryNode.data?.memory && (
+                <div className="space-y-3">
+                  <div>
+                    <strong>Core Context:</strong>
+                    <p className="mt-1 text-gray-700">{results.getMemoryNode.data.memory.coreContext}</p>
+                  </div>
+                  <div>
+                    <strong>Working Memory:</strong>
+                    <p className="mt-1 text-gray-700">{results.getMemoryNode.data.memory.workingMemory}</p>
+                  </div>
+                  <div>
+                    <strong>Key Facts ({results.getMemoryNode.data.memory.keyFacts?.length || 0}):</strong>
+                    <ul className="mt-1 text-gray-700 list-disc list-inside">
+                      {results.getMemoryNode.data.memory.keyFacts?.map((fact: string, index: number) => (
+                        <li key={index}>{fact}</li>
+                      )) || <li>No key facts extracted yet</li>}
+                    </ul>
+                  </div>
+                  <div className="flex gap-4 text-sm">
+                    <span><strong>Messages:</strong> {results.getMemoryNode.data.memory.messageCount}</span>
+                    <span><strong>Last Summary:</strong> {results.getMemoryNode.data.memory.lastSummaryAt}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {results.sendMemoryMessage && (
+          <div className="bg-white p-6 rounded-lg shadow text-black">
+            <h4 className="font-medium mb-2">Message Processing Result:</h4>
+            <ResultDisplay results={[results.sendMemoryMessage]} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const LLMTests = () => {
     const [prompt, setPrompt] = useState('Explain quantum computing in simple terms');
     const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant');
@@ -392,7 +599,161 @@ export default function TestPage() {
     </div>
   );
 
+  // Import the routing test component
+  const ApiRoutingTests = () => {
+    const [results, setResults] = useState<any[]>([]);
+    const [loading, setLoading] = useState<string | null>(null);
+
+    const testRoutes = [
+      // Test API gateway routing
+      { path: '/api/nodes', method: 'GET', description: 'List nodes (via API gateway)' },
+      { path: '/api/health', method: 'GET', description: 'Health check (via API gateway)' },
+      
+      // Test direct service routing (if available)
+      { path: '/nodes', method: 'GET', description: 'List nodes (direct)' },
+      { path: '/health', method: 'GET', description: 'Health check (direct)' },
+    ];
+
+    const testRoute = async (path: string, method: string, description: string) => {
+      setLoading(`${method} ${path}`);
+      
+      try {
+        const response = await fetch(path, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const responseData = await response.text();
+        let parsedData;
+        
+        try {
+          parsedData = JSON.parse(responseData);
+        } catch {
+          parsedData = responseData;
+        }
+
+        const result = {
+          path,
+          method,
+          status: response.status,
+          response: parsedData,
+          timestamp: new Date().toISOString(),
+        };
+
+        setResults(prev => [result, ...prev.slice(0, 9)]); // Keep last 10 results
+      } catch (error) {
+        const result = {
+          path,
+          method,
+          status: 0,
+          response: null,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString(),
+        };
+
+        setResults(prev => [result, ...prev.slice(0, 9)]);
+      } finally {
+        setLoading(null);
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">API Routing Architecture Test</h3>
+          <p className="text-sm text-gray-700">
+            Tests the flexible routing system. API gateway routes (/api/*) proxy through the web app, 
+            while direct routes may go directly to services depending on ALB configuration.
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          {testRoutes.map(({ path, method, description }) => (
+            <button
+              key={`${method}-${path}`}
+              onClick={() => testRoute(path, method, description)}
+              disabled={loading === `${method} ${path}`}
+              className={`p-3 text-left border rounded-lg hover:bg-gray-50 disabled:opacity-50 ${
+                loading === `${method} ${path}` ? 'bg-blue-50' : 'bg-white'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="px-2 py-1 rounded text-xs mr-2 bg-green-100 text-green-800">
+                    {method}
+                  </span>
+                  <span className="font-medium">{path}</span>
+                </div>
+                {loading === `${method} ${path}` && (
+                  <span className="text-sm text-blue-600">Testing...</span>
+                )}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">{description}</div>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setResults([])}
+          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
+        >
+          Clear Results
+        </button>
+
+        {results.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="font-semibold">Recent Test Results</h4>
+            {results.map((result, index) => (
+              <div key={index} className="border rounded-lg p-3 bg-white text-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">{result.method} {result.path}</span>
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    result.status >= 200 && result.status < 300 ? 'bg-green-100 text-green-800' :
+                    result.status >= 400 ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {result.status || 'ERROR'}
+                  </span>
+                </div>
+                
+                {result.error ? (
+                  <div className="bg-red-50 p-2 rounded text-xs">
+                    <strong>Error:</strong> {result.error}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 p-2 rounded">
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {typeof result.response === 'string' 
+                        ? result.response 
+                        : JSON.stringify(result.response, null, 2)
+                      }
+                    </pre>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="bg-yellow-50 p-3 rounded-lg text-sm">
+          <strong>Expected Results:</strong>
+          <ul className="mt-2 space-y-1 text-gray-700">
+            <li>• <strong>/api/*</strong> routes should work (200) via web app proxy</li>
+            <li>• Direct routes may work (200) or fail (404/502) depending on ALB config</li>
+            <li>• 502 errors indicate service unavailable</li>
+            <li>• 404 errors indicate route not configured</li>
+          </ul>
+        </div>
+      </div>
+    );
+  };
+
   const sections: TestSection[] = [
+    {
+      name: 'api-routing',
+      description: 'API Routing Architecture',
+      component: <ApiRoutingTests />
+    },
     {
       name: 'user-management',
       description: 'User Registration & Authentication',
@@ -412,6 +773,11 @@ export default function TestPage() {
       name: 'llm-testing',
       description: 'LLM Direct Testing',
       component: <LLMTests />
+    },
+    {
+      name: 'memory-testing',
+      description: 'Hierarchical Memory Testing',
+      component: <MemoryTests />
     }
   ];
 
