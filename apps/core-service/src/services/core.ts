@@ -1,6 +1,7 @@
 import { Node, Message } from '../types/domain';
 import { llmService } from './llm';
 import { vectorStore } from './vectorStore';
+import { memoryManager } from './memory';
 import { prismaCore, CoreTypes } from '@collm/database';
 
 export interface ICoreEngine {
@@ -28,15 +29,18 @@ export interface ICoreEngine {
 
 export class LLMCoreEngine implements ICoreEngine {
   async createNode(topic: string, initialDescription: string, model: string = 'claude-sonnet-4-5-20250929'): Promise<Node> {
-    // Generate initial state using LLM with the specified model
-    const prompt = `Initialize a conversation state for the topic: "${topic}". Description: "${initialDescription}". Provide a concise summary of the starting point.`;
-    const response = await llmService.generateCompletion(prompt, '', model);
+    // Initialize hierarchical memory
+    const initialMemory = memoryManager.initializeMemory(topic, initialDescription);
     
     const node = await prismaCore.node.create({
       data: {
         topic,
         description: initialDescription,
-        state: response.content,
+        coreContext: initialMemory.coreContext,
+        workingMemory: initialMemory.workingMemory,
+        keyFacts: initialMemory.keyFacts,
+        messageCount: initialMemory.messageCount,
+        lastSummaryAt: initialMemory.lastSummaryAt,
         model,
         version: 1,
       }
@@ -46,7 +50,13 @@ export class LLMCoreEngine implements ICoreEngine {
       id: node.id,
       topic: node.topic,
       description: node.description || undefined,
-      state: node.state,
+      memory: {
+        coreContext: node.coreContext,
+        workingMemory: node.workingMemory,
+        keyFacts: node.keyFacts,
+        messageCount: node.messageCount,
+        lastSummaryAt: node.lastSummaryAt,
+      },
       model: node.model,
       version: node.version,
       createdAt: node.createdAt,
@@ -69,25 +79,51 @@ export class LLMCoreEngine implements ICoreEngine {
       throw new Error(`Node ${nodeId} not found`);
     }
 
-    console.log(`[CoreEngine] Updating state for node ${nodeId} with ${newMessages.length} new messages using model "${node.model}"`);
+    console.log(`[CoreEngine] Updating memory for node ${nodeId} with ${newMessages.length} new messages using model "${node.model}"`);
     
-    const messagesText = newMessages.map(m => `- ${m.content}`).join('\n');
-    const prompt = `
-Current Conversation State:
-${node.state}
+    // Convert database node to domain node for memory operations
+    const currentNode: Node = {
+      id: node.id,
+      topic: node.topic,
+      description: node.description || undefined,
+      memory: {
+        coreContext: node.coreContext,
+        workingMemory: node.workingMemory,
+        keyFacts: node.keyFacts,
+        messageCount: node.messageCount,
+        lastSummaryAt: node.lastSummaryAt,
+      },
+      model: node.model,
+      version: node.version,
+      createdAt: node.createdAt,
+      updatedAt: node.updatedAt,
+    };
 
-New Accepted Messages:
-${messagesText}
-
-Task: Update the conversation state to incorporate the new information. Keep the summary concise but comprehensive.
-    `;
-
-    const response = await llmService.generateCompletion(prompt, '', node.model);
+    // Process each new message through memory manager
+    let updatedMemory = currentNode.memory;
+    for (const message of newMessages) {
+      // Get context and generate response
+      const context = await memoryManager.getContext(currentNode, []);
+      const prompt = `${context}\n\nNew message: ${message.content}\n\nRespond thoughtfully based on the conversation context.`;
+      const response = await llmService.generateCompletion(prompt, '', node.model);
+      
+      // Update memory with the new message and response
+      updatedMemory = await memoryManager.addMessage(
+        { ...currentNode, memory: updatedMemory }, 
+        message, 
+        response.content
+      );
+    }
     
+    // Update database with new memory state
     const updatedNode = await prismaCore.node.update({
       where: { id: nodeId },
       data: {
-        state: response.content,
+        coreContext: updatedMemory.coreContext,
+        workingMemory: updatedMemory.workingMemory,
+        keyFacts: updatedMemory.keyFacts,
+        messageCount: updatedMemory.messageCount,
+        lastSummaryAt: updatedMemory.lastSummaryAt,
         version: { increment: 1 },
       }
     }) as CoreTypes.Node;
@@ -96,7 +132,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
       id: updatedNode.id,
       topic: updatedNode.topic,
       description: updatedNode.description || undefined,
-      state: updatedNode.state,
+      memory: {
+        coreContext: updatedNode.coreContext,
+        workingMemory: updatedNode.workingMemory,
+        keyFacts: updatedNode.keyFacts,
+        messageCount: updatedNode.messageCount,
+        lastSummaryAt: updatedNode.lastSummaryAt,
+      },
       model: updatedNode.model,
       version: updatedNode.version,
       createdAt: updatedNode.createdAt,
@@ -117,7 +159,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
       id: node.id,
       topic: node.topic,
       description: node.description || undefined,
-      state: node.state,
+      memory: {
+        coreContext: node.coreContext,
+        workingMemory: node.workingMemory,
+        keyFacts: node.keyFacts,
+        messageCount: node.messageCount,
+        lastSummaryAt: node.lastSummaryAt,
+      },
       model: node.model,
       version: node.version,
       createdAt: node.createdAt,
@@ -134,7 +182,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
       id: node.id,
       topic: node.topic,
       description: node.description || undefined,
-      state: node.state,
+      memory: {
+        coreContext: node.coreContext,
+        workingMemory: node.workingMemory,
+        keyFacts: node.keyFacts,
+        messageCount: node.messageCount,
+        lastSummaryAt: node.lastSummaryAt,
+      },
       model: node.model,
       version: node.version,
       createdAt: node.createdAt,

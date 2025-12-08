@@ -10,6 +10,76 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    networks:
+      - collm-network
+
+  core-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.core-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/core_db
+      - NODE_ENV=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+    networks:
+      - collm-network
+
+  message-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.message-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/core_db
+      - NODE_ENV=development
+    ports:
+      - "3002:3002"
+    depends_on:
+      - db
+    networks:
+      - collm-network
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.user-service
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/user_db
+      - NODE_ENV=development
+    ports:
+      - "3003:3003"
+    depends_on:
+      - db
+    networks:
+      - collm-network
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      - NODE_ENV=development
+      # Service URLs for proxy routing
+      - CORE_SERVICE_URL=http://core-service:3001
+      - MESSAGE_SERVICE_URL=http://message-service:3002
+      - USER_SERVICE_URL=http://user-service:3003
+    ports:
+      - "3000:3000"
+    depends_on:
+      - core-service
+      - message-service
+      - user-service
+    networks:
+      - collm-network
+
+networks:
+  collm-network:
+    driver: bridge
 
 volumes:
   postgres_data:

@@ -1,12 +1,20 @@
 // Domain models for the Core Service
 // These are internal to this service and should not be shared with other services
 
+export interface NodeMemory {
+  coreContext: string;      // The essential topic/conversation essence - never decays
+  workingMemory: string;    // Recent compressed state  
+  keyFacts: string[];       // Important extracted facts
+  messageCount: number;
+  lastSummaryAt: number;    // Message count when last summarized
+}
+
 export interface Node {
   id: string;
   topic: string;
   description?: string | null;
-  state: string; // Serialized LLM state or summary
-  model: string; // LLM model to use for this node
+  memory: NodeMemory;       // Structured memory replacing simple state
+  model: string;            // LLM model to use for this node
   version: number;
   createdAt: Date;
   updatedAt: Date;

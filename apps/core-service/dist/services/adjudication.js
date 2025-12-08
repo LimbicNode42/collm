@@ -9,8 +9,14 @@ class LLMAdjudicationEngine {
 You are an impartial adjudicator for a collaborative conversation.
 Your goal is to determine if a new message is relevant to the current state of the conversation and if it provides new information (is not stale).
 
-Current Conversation State:
-${node.state}
+Core Topic Context:
+${node.memory.coreContext}
+
+Current Working Memory:
+${node.memory.workingMemory}
+
+Key Facts Known:
+${node.memory.keyFacts.join('\n- ')}
 
 New Message:
 ${message.content}

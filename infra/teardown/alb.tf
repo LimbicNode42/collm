@@ -110,111 +110,87 @@ resource "aws_lb_listener" "http" {
   tags = local.tags
 }
 
-# Rule to route /api/user/* to user-service
-resource "aws_lb_listener_rule" "user_service_users" {
+# Flexible service routing - routes by service domain rather than specific paths
+# This eliminates the need to update infrastructure for new API endpoints
+
+# Core Service - handles nodes, LLM operations, and core business logic
+resource "aws_lb_listener_rule" "core_service_api" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.core_service.arn
+  }
+
+  condition {
+    path_pattern {
+      values = [
+        "/nodes*",       # All node operations
+        "/llm*",         # All LLM operations  
+        "/health",       # Health checks
+        "/adjudication*" # Future adjudication endpoints
+      ]
+    }
+  }
+}
+
+# Message Service - handles message processing and queuing
+resource "aws_lb_listener_rule" "message_service_api" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 110
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.user_service.arn
+    target_group_arn = aws_lb_target_group.message_service.arn
   }
 
   condition {
     path_pattern {
-      values = ["/users/*"]
+      values = [
+        "/message*", # All message operations (existing endpoint)
+        "/queue*"    # All queue operations
+      ]
     }
   }
 }
 
-resource "aws_lb_listener_rule" "user_service_auth" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 111
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.user_service.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/register", "/login"]
-    }
-  }
-
-  condition {
-    http_request_method {
-      values = ["POST"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "message_service" {
+# User Service - handles authentication and user management
+resource "aws_lb_listener_rule" "user_service_api" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 120
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.message_service.arn
+    target_group_arn = aws_lb_target_group.user_service.arn
   }
 
   condition {
     path_pattern {
-      values = ["/message", "/queue/*"]
+      values = [
+        "/users*",   # All user operations
+        "/auth*",    # All auth operations
+        "/register", # Registration
+        "/login"     # Login
+      ]
     }
   }
 }
 
-resource "aws_lb_listener_rule" "message_service_get" {
+# API Gateway Pattern - route all /api/* to web app for client-side routing
+# This allows the web app to handle its own API routing without ALB updates
+resource "aws_lb_listener_rule" "web_api_catchall" {
   listener_arn = aws_lb_listener.http.arn
-  priority     = 121
+  priority     = 200
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.message_service.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 
   condition {
     path_pattern {
-      values = ["/message/*"]
-    }
-  }
-
-  condition {
-    http_request_method {
-      values = ["GET"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "core_service_nodes" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 130
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.core_service.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/nodes", "/nodes/*"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "core_service_llm" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 135
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.core_service.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/llm", "/llm/*"]
+      values = ["/api*"]
     }
   }
 }

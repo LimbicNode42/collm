@@ -345,7 +345,11 @@ export default function TestPage() {
       const result = await memoryApiCall('createMemoryNode', '/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, description })
+        body: JSON.stringify({ 
+          topic, 
+          description,
+          model: 'claude-sonnet-4-5-20250929'
+        })
       });
       
       // Extract node ID from result for further testing
@@ -413,6 +417,17 @@ export default function TestPage() {
 
     return (
       <div className="space-y-6">
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">Memory System Testing</h3>
+          <p className="text-sm text-gray-700 mb-2">
+            This tests the hierarchical memory system for conversation nodes. 
+          </p>
+          <div className="text-xs text-gray-600">
+            <strong>Note:</strong> If backend services aren't running, you'll see 502/404 errors - this is expected.
+            To test fully, start the core-service and database.
+          </div>
+        </div>
+        
         <div className="bg-white p-6 rounded-lg shadow text-black">
           <h3 className="text-lg font-semibold mb-4">Node Creation & Memory Initialization</h3>
           <div className="space-y-4 mb-4">
@@ -429,16 +444,32 @@ export default function TestPage() {
               className="border rounded px-3 py-2 w-full"
               rows={2}
             />
+            <input
+              placeholder="Node ID (auto-filled after creation, or enter manually for testing)"
+              value={nodeId}
+              onChange={(e) => setNodeId(e.target.value)}
+              className="border rounded px-3 py-2 w-full text-sm"
+            />
           </div>
-          <button
-            onClick={createTestNode}
-            disabled={memoryLoading.createMemoryNode}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 mr-2"
-          >
-            {memoryLoading.createMemoryNode ? 'Creating...' : 'Create Node'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={createTestNode}
+              disabled={memoryLoading.createMemoryNode}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {memoryLoading.createMemoryNode ? 'Creating...' : 'Create Node'}
+            </button>
+            <button
+              onClick={() => setNodeId('test-node-' + Date.now())}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm"
+            >
+              Use Mock Node ID
+            </button>
+          </div>
           {nodeId && (
-            <span className="text-sm text-gray-600">Node ID: {nodeId}</span>
+            <div className="mt-2 text-sm text-gray-600">
+              <strong>Node ID:</strong> {nodeId}
+            </div>
           )}
         </div>
 

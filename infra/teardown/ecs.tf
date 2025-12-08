@@ -511,8 +511,17 @@ resource "aws_ecs_task_definition" "web" {
           name  = "NEXT_PUBLIC_API_URL"
           value = "" # Relative path, handled by CloudFront routing
         },
+        # Service URLs for API proxy routing
         {
           name  = "CORE_SERVICE_URL"
+          value = "http://${aws_lb.main.dns_name}"
+        },
+        {
+          name  = "MESSAGE_SERVICE_URL"
+          value = "http://${aws_lb.main.dns_name}"
+        },
+        {
+          name  = "USER_SERVICE_URL"
           value = "http://${aws_lb.main.dns_name}"
         }
       ]

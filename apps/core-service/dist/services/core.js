@@ -3,16 +3,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.coreEngine = exports.LLMCoreEngine = void 0;
 const llm_1 = require("./llm");
 const vectorStore_1 = require("./vectorStore");
+const memory_1 = require("./memory");
 const database_1 = require("@collm/database");
 class LLMCoreEngine {
     async createNode(topic, initialDescription, model = 'claude-sonnet-4-5-20250929') {
-        const prompt = `Initialize a conversation state for the topic: "${topic}". Description: "${initialDescription}". Provide a concise summary of the starting point.`;
-        const response = await llm_1.llmService.generateCompletion(prompt, '', model);
+        const initialMemory = memory_1.memoryManager.initializeMemory(topic, initialDescription);
         const node = await database_1.prismaCore.node.create({
             data: {
                 topic,
                 description: initialDescription,
-                state: response.content,
+                coreContext: initialMemory.coreContext,
+                workingMemory: initialMemory.workingMemory,
+                keyFacts: initialMemory.keyFacts,
+                messageCount: initialMemory.messageCount,
+                lastSummaryAt: initialMemory.lastSummaryAt,
                 model,
                 version: 1,
             }
@@ -21,7 +25,13 @@ class LLMCoreEngine {
             id: node.id,
             topic: node.topic,
             description: node.description || undefined,
-            state: node.state,
+            memory: {
+                coreContext: node.coreContext,
+                workingMemory: node.workingMemory,
+                keyFacts: node.keyFacts,
+                messageCount: node.messageCount,
+                lastSummaryAt: node.lastSummaryAt,
+            },
             model: node.model,
             version: node.version,
             createdAt: node.createdAt,
@@ -38,22 +48,38 @@ class LLMCoreEngine {
         if (!node) {
             throw new Error(`Node ${nodeId} not found`);
         }
-        console.log(`[CoreEngine] Updating state for node ${nodeId} with ${newMessages.length} new messages using model "${node.model}"`);
-        const messagesText = newMessages.map(m => `- ${m.content}`).join('\n');
-        const prompt = `
-Current Conversation State:
-${node.state}
-
-New Accepted Messages:
-${messagesText}
-
-Task: Update the conversation state to incorporate the new information. Keep the summary concise but comprehensive.
-    `;
-        const response = await llm_1.llmService.generateCompletion(prompt, '', node.model);
+        console.log(`[CoreEngine] Updating memory for node ${nodeId} with ${newMessages.length} new messages using model "${node.model}"`);
+        const currentNode = {
+            id: node.id,
+            topic: node.topic,
+            description: node.description || undefined,
+            memory: {
+                coreContext: node.coreContext,
+                workingMemory: node.workingMemory,
+                keyFacts: node.keyFacts,
+                messageCount: node.messageCount,
+                lastSummaryAt: node.lastSummaryAt,
+            },
+            model: node.model,
+            version: node.version,
+            createdAt: node.createdAt,
+            updatedAt: node.updatedAt,
+        };
+        let updatedMemory = currentNode.memory;
+        for (const message of newMessages) {
+            const context = await memory_1.memoryManager.getContext(currentNode, []);
+            const prompt = `${context}\n\nNew message: ${message.content}\n\nRespond thoughtfully based on the conversation context.`;
+            const response = await llm_1.llmService.generateCompletion(prompt, '', node.model);
+            updatedMemory = await memory_1.memoryManager.addMessage(Object.assign(Object.assign({}, currentNode), { memory: updatedMemory }), message, response.content);
+        }
         const updatedNode = await database_1.prismaCore.node.update({
             where: { id: nodeId },
             data: {
-                state: response.content,
+                coreContext: updatedMemory.coreContext,
+                workingMemory: updatedMemory.workingMemory,
+                keyFacts: updatedMemory.keyFacts,
+                messageCount: updatedMemory.messageCount,
+                lastSummaryAt: updatedMemory.lastSummaryAt,
                 version: { increment: 1 },
             }
         });
@@ -61,7 +87,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
             id: updatedNode.id,
             topic: updatedNode.topic,
             description: updatedNode.description || undefined,
-            state: updatedNode.state,
+            memory: {
+                coreContext: updatedNode.coreContext,
+                workingMemory: updatedNode.workingMemory,
+                keyFacts: updatedNode.keyFacts,
+                messageCount: updatedNode.messageCount,
+                lastSummaryAt: updatedNode.lastSummaryAt,
+            },
             model: updatedNode.model,
             version: updatedNode.version,
             createdAt: updatedNode.createdAt,
@@ -79,7 +111,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
             id: node.id,
             topic: node.topic,
             description: node.description || undefined,
-            state: node.state,
+            memory: {
+                coreContext: node.coreContext,
+                workingMemory: node.workingMemory,
+                keyFacts: node.keyFacts,
+                messageCount: node.messageCount,
+                lastSummaryAt: node.lastSummaryAt,
+            },
             model: node.model,
             version: node.version,
             createdAt: node.createdAt,
@@ -94,7 +132,13 @@ Task: Update the conversation state to incorporate the new information. Keep the
             id: node.id,
             topic: node.topic,
             description: node.description || undefined,
-            state: node.state,
+            memory: {
+                coreContext: node.coreContext,
+                workingMemory: node.workingMemory,
+                keyFacts: node.keyFacts,
+                messageCount: node.messageCount,
+                lastSummaryAt: node.lastSummaryAt,
+            },
             model: node.model,
             version: node.version,
             createdAt: node.createdAt,

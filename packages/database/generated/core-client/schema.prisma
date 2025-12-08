@@ -11,16 +11,23 @@ datasource db {
 }
 
 model Node {
-  id          String                       @id @default(cuid())
+  id          String  @id @default(cuid())
   topic       String
   description String?
-  state       String                       @db.Text
-  embedding   Unsupported("vector(1536)")?
-  model       String                       @default("claude-sonnet-4-5-20250929")
-  version     Int                          @default(1)
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
-  messages    Message[]
+
+  // Structured memory fields replacing simple 'state'
+  coreContext   String   @db.Text // The essential topic/conversation essence - never decays
+  workingMemory String   @db.Text // Recent compressed state
+  keyFacts      String[] // Important extracted facts as array
+  messageCount  Int      @default(0)
+  lastSummaryAt Int      @default(0) // Message count when last summarized
+
+  embedding Unsupported("vector(1536)")?
+  model     String                       @default("claude-sonnet-4-5-20250929")
+  version   Int                          @default(1)
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+  messages  Message[]
 }
 
 model Message {
