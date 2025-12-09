@@ -104,7 +104,7 @@ fastify.get('/users/:id', async (request, reply) => {
 });
 const start = async () => {
     try {
-        await fastify.listen({ port: 3002, host: '0.0.0.0' });
+        await fastify.listen({ port: 3003, host: '0.0.0.0' });
     }
     catch (err) {
         fastify.log.error(err);

@@ -221,8 +221,8 @@ const startHttpServer = async () => {
         console.log('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set' : 'Not set');
         console.log('[CoreService] SQS_QUEUE_URL:', process.env.SQS_QUEUE_URL ? 'Set' : 'Not set');
         await testDatabaseConnection();
-        await fastify.listen({ port: 3003, host: '0.0.0.0' });
-        console.log('[CoreService] HTTP server started on port 3003');
+        await fastify.listen({ port: 3001, host: '0.0.0.0' });
+        console.log('[CoreService] HTTP server started on port 3001');
         console.log('[CoreService] Registered routes:');
         fastify.printRoutes();
     }

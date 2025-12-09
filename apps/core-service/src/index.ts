@@ -270,8 +270,8 @@ const startHttpServer = async () => {
     // Test database connection before starting server
     await testDatabaseConnection();
     
-    await fastify.listen({ port: 3003, host: '0.0.0.0' });
-    console.log('[CoreService] HTTP server started on port 3003');
+    await fastify.listen({ port: 3001, host: '0.0.0.0' });
+    console.log('[CoreService] HTTP server started on port 3001');
     
     // Log all registered routes for debugging
     console.log('[CoreService] Registered routes:');
