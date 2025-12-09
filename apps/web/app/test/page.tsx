@@ -373,7 +373,7 @@ export default function TestPage() {
         content: message,
         nodeId,
         userId: 'test-user-' + Date.now(),
-        targetNodeVersion: 0
+        targetNodeVersion: 1
       };
       
       const result = await memoryApiCall('sendMemoryMessage', '/api/message', {

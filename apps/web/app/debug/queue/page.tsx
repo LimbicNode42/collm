@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 export default function QueueDebugPage() {
   const [userId, setUserId] = useState('test-user-1');
-  const [nodeId, setNodeId] = useState('test-node-1');
+  const [nodeId, setNodeId] = useState('');
   const [content, setContent] = useState('Hello World');
   const [targetNodeVersion, setTargetNodeVersion] = useState(1);
   
@@ -32,15 +32,19 @@ export default function QueueDebugPage() {
     setLoading(true);
     setNodeResult(null);
     try {
-      const res = await fetch('/queue/create-node', {
+      const res = await fetch('/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: 'Debug Node', description: 'Created for testing' }),
+        body: JSON.stringify({ 
+          topic: 'Debug Node', 
+          description: 'Created for testing',
+          model: 'claude-sonnet-4-5-20250929'
+        }),
       });
       const data = await res.json();
       setNodeResult(data);
-      if (data.success && data.node?.id) {
-        setNodeId(data.node.id);
+      if (res.ok && data?.id) {
+        setNodeId(data.id);
       }
     } catch (err: any) {
       setNodeResult({ error: err.message });
@@ -51,6 +55,12 @@ export default function QueueDebugPage() {
 
   const handlePush = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!nodeId || nodeId.trim() === '') {
+      setPushResult({ error: 'Please create a test node first or provide a valid nodeId' });
+      return;
+    }
+    
     setLoading(true);
     setPushResult(null);
     try {
@@ -120,8 +130,16 @@ export default function QueueDebugPage() {
               type="text"
               value={nodeId}
               onChange={(e) => setNodeId(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
+              className={`mt-1 block w-full rounded-md shadow-sm p-2 border ${
+                nodeId ? 'border-green-300 bg-green-50' : 'border-gray-300'
+              }`}
+              placeholder="Create a test node first or enter existing node ID"
             />
+            {!nodeId && (
+              <p className="mt-1 text-sm text-amber-600">
+                ⚠️ You must create a test node or provide a valid node ID before sending messages
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Content</label>
@@ -142,7 +160,7 @@ export default function QueueDebugPage() {
           </div>
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !nodeId}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? 'Pushing...' : 'Push to Queue'}
