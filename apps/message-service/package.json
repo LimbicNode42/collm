@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.936.0",
+    "@collm/contracts": "*",
     "@collm/database": "*",
     "fastify": "^4.26.1"
   },

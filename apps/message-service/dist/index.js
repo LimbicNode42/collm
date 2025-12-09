@@ -44,8 +44,7 @@ fastify.get('/message/:id', async (request, reply) => {
     }
 });
 fastify.post('/message', async (request, reply) => {
-    const body = request.body;
-    const { userId, nodeId, content, targetNodeVersion } = body;
+    const { userId, nodeId, content, targetNodeVersion } = request.body;
     if (!userId || !nodeId || !content || targetNodeVersion === undefined) {
         return reply.code(400).send({ error: 'Missing required fields' });
     }

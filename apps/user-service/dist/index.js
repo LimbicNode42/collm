@@ -20,19 +20,34 @@ fastify.get('/health', async () => {
     return { status: 'ok' };
 });
 fastify.post('/register', async (request, reply) => {
-    const body = request.body;
-    const { email, password, name } = body;
+    const { email, password, name } = request.body;
     if (!email || !password) {
-        return reply.code(400).send({ error: 'Missing required fields: email, password' });
+        return reply.code(400).send({
+            success: false,
+            error: 'Missing required fields: email, password'
+        });
     }
     try {
         const existingUser = await user_1.userService.getUserByEmail(email);
         if (existingUser) {
-            return reply.code(409).send({ error: 'User already exists' });
+            return reply.code(409).send({
+                success: false,
+                error: 'User already exists'
+            });
         }
         const user = await user_1.userService.createUser(email, password, name);
         const token = fastify.jwt.sign({ id: user.id, email: user.email });
-        return reply.code(201).send({ user, token });
+        return reply.code(201).send({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                createdAt: user.createdAt.toISOString(),
+                updatedAt: user.updatedAt.toISOString()
+            }
+        });
     }
     catch (error) {
         request.log.error(error);
@@ -40,18 +55,33 @@ fastify.post('/register', async (request, reply) => {
     }
 });
 fastify.post('/login', async (request, reply) => {
-    const body = request.body;
-    const { email, password } = body;
+    const { email, password } = request.body;
     if (!email || !password) {
-        return reply.code(400).send({ error: 'Missing required fields: email, password' });
+        return reply.code(400).send({
+            success: false,
+            error: 'Missing required fields: email, password'
+        });
     }
     try {
         const user = await user_1.userService.validateUser(email, password);
         if (!user) {
-            return reply.code(401).send({ error: 'Invalid email or password' });
+            return reply.code(401).send({
+                success: false,
+                error: 'Invalid email or password'
+            });
         }
         const token = fastify.jwt.sign({ id: user.id, email: user.email });
-        return reply.send({ user, token });
+        return reply.send({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name,
+                createdAt: user.createdAt.toISOString(),
+                updatedAt: user.updatedAt.toISOString()
+            }
+        });
     }
     catch (error) {
         request.log.error(error);

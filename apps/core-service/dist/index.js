@@ -33,14 +33,29 @@ fastify.get('/health', async (request, reply) => {
     }
 });
 fastify.post('/nodes', async (request, reply) => {
-    const body = request.body;
-    const { topic, description, model } = body;
+    var _a, _b, _c, _d, _e;
+    const { topic, description, model } = request.body;
     if (!topic) {
         return reply.code(400).send({ error: 'Topic is required' });
     }
     try {
         const node = await core_1.coreEngine.createNode(topic, description || 'Node created via API', model || 'claude-sonnet-4-5-20250929');
-        return reply.send({ success: true, node });
+        const nodeResponse = {
+            id: node.id,
+            topic: node.topic,
+            description: node.description || '',
+            model: node.model,
+            memory: {
+                coreContext: ((_a = node.memory) === null || _a === void 0 ? void 0 : _a.coreContext) || '',
+                workingMemory: ((_b = node.memory) === null || _b === void 0 ? void 0 : _b.workingMemory) || '',
+                keyFacts: ((_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) || [],
+                messageCount: ((_d = node.memory) === null || _d === void 0 ? void 0 : _d.messageCount) || 0,
+                lastSummaryAt: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+            },
+            createdAt: node.createdAt.toISOString(),
+            updatedAt: node.updatedAt.toISOString(),
+        };
+        return reply.code(201).send(nodeResponse);
     }
     catch (error) {
         request.log.error(error);
@@ -49,12 +64,39 @@ fastify.post('/nodes', async (request, reply) => {
 });
 fastify.get('/nodes', async (request, reply) => {
     try {
-        const nodes = await core_1.coreEngine.listNodes();
-        return reply.send({ success: true, nodes });
+        const { limit = 10, offset = 0 } = request.query;
+        const dbNodes = await core_1.coreEngine.listNodes();
+        const nodes = dbNodes.map(node => {
+            var _a, _b, _c, _d, _e;
+            return ({
+                id: node.id,
+                topic: node.topic,
+                description: node.description || '',
+                model: node.model,
+                memory: {
+                    coreContext: ((_a = node.memory) === null || _a === void 0 ? void 0 : _a.coreContext) || '',
+                    workingMemory: ((_b = node.memory) === null || _b === void 0 ? void 0 : _b.workingMemory) || '',
+                    keyFacts: ((_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) || [],
+                    messageCount: ((_d = node.memory) === null || _d === void 0 ? void 0 : _d.messageCount) || 0,
+                    lastSummaryAt: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+                },
+                createdAt: node.createdAt.toISOString(),
+                updatedAt: node.updatedAt.toISOString(),
+            });
+        });
+        return reply.send({
+            nodes,
+            total: nodes.length,
+            limit,
+            offset
+        });
     }
     catch (error) {
         request.log.error(error);
-        return reply.code(500).send({ error: 'Internal Server Error' });
+        return reply.code(500).send({
+            error: 'Internal Server Error',
+            code: 'INTERNAL_ERROR'
+        });
     }
 });
 fastify.get('/nodes/:id', async (request, reply) => {

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+// Contract types for API calls
+// import { CoreService, MessageService, UserService } from '@collm/contracts';
 
 interface TestSection {
   name: string;
@@ -342,14 +344,17 @@ export default function TestPage() {
     };
 
     const createTestNode = async () => {
+      // Using OpenAPI contract types for type safety
+      const requestBody: { topic: string; description?: string; model?: string } = { 
+        topic, 
+        description: description || undefined,
+        model: 'claude-sonnet-4-5-20250929'
+      };
+      
       const result = await memoryApiCall('createMemoryNode', '/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          topic, 
-          description,
-          model: 'claude-sonnet-4-5-20250929'
-        })
+        body: JSON.stringify(requestBody)
       });
       
       // Extract node ID from result for further testing
@@ -364,15 +369,17 @@ export default function TestPage() {
         return;
       }
       
+      const requestBody: { userId: string; nodeId: string; content: string; targetNodeVersion: number } = { 
+        content: message,
+        nodeId,
+        userId: 'test-user-' + Date.now(),
+        targetNodeVersion: 0
+      };
+      
       const result = await memoryApiCall('sendMemoryMessage', '/api/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          content: message,
-          nodeId,
-          userId: 'test-user-' + Date.now(),
-          targetNodeVersion: 0
-        })
+        body: JSON.stringify(requestBody)
       });
       
       // Add to conversation history for display

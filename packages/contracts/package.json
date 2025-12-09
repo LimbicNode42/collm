@@ -1,0 +1,32 @@
+{
+  "name": "@collm/contracts",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npm run generate && tsc && npm run docs",
+    "dev": "npm run generate && tsc --watch",
+    "generate": "npm run generate:types && npm run generate:schemas",
+    "generate:types": "openapi-typescript openapi/core-service.yaml -o src/generated/core-service.ts && openapi-typescript openapi/message-service.yaml -o src/generated/message-service.ts && openapi-typescript openapi/user-service.yaml -o src/generated/user-service.ts",
+    "generate:schemas": "node scripts/generate-zod-schemas.js",
+    "validate": "jest --testPathPattern=contract-tests",
+    "docs": "npm run docs:core && npm run docs:message && npm run docs:user && npm run docs:index",
+    "docs:core": "npx @redocly/cli build-docs openapi/core-service.yaml --output docs/core-service.html",
+    "docs:message": "npx @redocly/cli build-docs openapi/message-service.yaml --output docs/message-service.html", 
+    "docs:user": "npx @redocly/cli build-docs openapi/user-service.yaml --output docs/user-service.html",
+    "docs:index": "node scripts/generate-docs-index.js",
+    "serve-docs": "npx @redocly/cli preview-docs openapi/core-service.yaml",
+    "serve-docs:all": "python -m http.server 8080 -d docs"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "openapi-typescript": "^6.7.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "redoc-cli": "^0.13.0",
+    "openapi-zod-client": "^1.16.0"
+  }
+}

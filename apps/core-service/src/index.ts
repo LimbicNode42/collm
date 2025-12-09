@@ -5,6 +5,7 @@ import { coreEngine } from './services/core';
 import { llmService } from './services/llm';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
+import { CoreService } from '@collm/contracts';
 
 // HTTP Server for Node Management
 const fastify = Fastify({
@@ -35,9 +36,11 @@ fastify.get('/health', async (request, reply) => {
 });
 
 // Node management endpoints
-fastify.post('/nodes', async (request, reply) => {
-  const body = request.body as any;
-  const { topic, description, model } = body;
+fastify.post<{
+  Body: CoreService.CreateNodeRequest;
+  Reply: CoreService.NodeResponse | { error: string };
+}>('/nodes', async (request, reply) => {
+  const { topic, description, model } = request.body;
 
   if (!topic) {
     return reply.code(400).send({ error: 'Topic is required' });
@@ -49,20 +52,68 @@ fastify.post('/nodes', async (request, reply) => {
       description || 'Node created via API',
       model || 'claude-sonnet-4-5-20250929'
     );
-    return reply.send({ success: true, node });
+    
+    // Convert to OpenAPI contract format
+    const nodeResponse: CoreService.NodeResponse = {
+      id: node.id,
+      topic: node.topic,
+      description: node.description || '',
+      model: node.model,
+      memory: {
+        coreContext: node.memory?.coreContext || '',
+        workingMemory: node.memory?.workingMemory || '',
+        keyFacts: node.memory?.keyFacts || [],
+        messageCount: node.memory?.messageCount || 0,
+        lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+      },
+      createdAt: node.createdAt.toISOString(),
+      updatedAt: node.updatedAt.toISOString(),
+    };
+    
+    return reply.code(201).send(nodeResponse);
   } catch (error) {
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal Server Error' });
   }
 });
 
-fastify.get('/nodes', async (request, reply) => {
+fastify.get<{
+  Querystring: { limit?: number; offset?: number };
+  Reply: { nodes: CoreService.NodeResponse[]; total: number; limit: number; offset: number };
+}>('/nodes', async (request, reply) => {
   try {
-    const nodes = await coreEngine.listNodes();
-    return reply.send({ success: true, nodes });
+    const { limit = 10, offset = 0 } = request.query;
+    const dbNodes = await coreEngine.listNodes();
+    
+    // Convert to OpenAPI contract format
+    const nodes: CoreService.NodeResponse[] = dbNodes.map(node => ({
+      id: node.id,
+      topic: node.topic,
+      description: node.description || '',
+      model: node.model,
+      memory: {
+        coreContext: node.memory?.coreContext || '',
+        workingMemory: node.memory?.workingMemory || '',
+        keyFacts: node.memory?.keyFacts || [],
+        messageCount: node.memory?.messageCount || 0,
+        lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+      },
+      createdAt: node.createdAt.toISOString(),
+      updatedAt: node.updatedAt.toISOString(),
+    }));
+    
+    return reply.send({ 
+      nodes, 
+      total: nodes.length, 
+      limit, 
+      offset 
+    });
   } catch (error) {
     request.log.error(error);
-    return reply.code(500).send({ error: 'Internal Server Error' });
+    return reply.code(500).send({ 
+      error: 'Internal Server Error',
+      code: 'INTERNAL_ERROR'
+    } as any);
   }
 });
 

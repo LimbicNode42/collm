@@ -1,0 +1,315 @@
+openapi: 3.0.0
+info:
+  title: Core Service API
+  version: 1.0.0
+  description: Handles node management, memory system, and LLM interactions
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: http://core-service:3001
+    description: Docker container
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /nodes:
+    post:
+      summary: Create a new conversation node
+      description: Creates a node with hierarchical memory system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNodeRequest'
+            example:
+              topic: "Artificial Intelligence"
+              description: "Exploring the fundamentals of AI and machine learning"
+              model: "claude-sonnet-4-5-20250929"
+      responses:
+        '201':
+          description: Node created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: List all nodes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of nodes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NodeResponse'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /nodes/{id}:
+    get:
+      summary: Get node by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node details with memory state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeResponse'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update node
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNodeRequest'
+      responses:
+        '200':
+          description: Node updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeResponse'
+
+  /llm/chat:
+    post:
+      summary: Direct LLM chat interaction
+      description: Send a message directly to the LLM without node context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LLMChatRequest'
+      responses:
+        '200':
+          description: LLM response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMChatResponse'
+
+  /llm/models:
+    get:
+      summary: List available LLM models
+      responses:
+        '200':
+          description: Available models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LLMModel'
+
+components:
+  schemas:
+    CreateNodeRequest:
+      type: object
+      required:
+        - topic
+      properties:
+        topic:
+          type: string
+          description: Main topic of the conversation node
+          example: "Artificial Intelligence"
+        description:
+          type: string
+          description: Detailed description of the node purpose
+          example: "Exploring the fundamentals of AI and machine learning"
+        model:
+          type: string
+          description: LLM model to use for this node
+          default: "claude-sonnet-4-5-20250929"
+          enum:
+            - "claude-sonnet-4-5-20250929"
+            - "gpt-4o"
+            - "gemini-pro"
+
+    UpdateNodeRequest:
+      type: object
+      properties:
+        topic:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+
+    NodeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "node-abc123"
+        topic:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        memory:
+          $ref: '#/components/schemas/NodeMemory'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NodeMemory:
+      type: object
+      description: Hierarchical memory structure for the node
+      properties:
+        coreContext:
+          type: string
+          description: Core context that persists throughout conversation
+        workingMemory:
+          type: string
+          description: Recent conversation context
+        keyFacts:
+          type: array
+          items:
+            type: string
+          description: Important facts extracted from conversation
+        messageCount:
+          type: integer
+          description: Total number of messages processed
+        lastSummaryAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When working memory was last summarized
+
+    LLMChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: User message to send to LLM
+        model:
+          type: string
+          description: LLM model to use
+          default: "claude-sonnet-4-5-20250929"
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 0.7
+        maxTokens:
+          type: integer
+          minimum: 1
+          maximum: 8000
+          default: 1000
+
+    LLMChatResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: LLM generated response
+        model:
+          type: string
+        usage:
+          type: object
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+
+    LLMModel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+          enum: ["openai", "anthropic", "google"]
+        maxTokens:
+          type: integer
+        costPer1kTokens:
+          type: number
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details

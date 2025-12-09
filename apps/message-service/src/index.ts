@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { prismaCore } from '@collm/database';
 import { messageQueue } from './services/queue';
 import { QueueMessage } from './types/domain';
+import { MessageService } from '@collm/contracts';
 
 const fastify = Fastify({
   logger: true
@@ -44,9 +45,11 @@ fastify.get('/message/:id', async (request, reply) => {
   }
 });
 
-fastify.post('/message', async (request, reply) => {
-  const body = request.body as any;
-  const { userId, nodeId, content, targetNodeVersion } = body;
+fastify.post<{
+  Body: MessageService.SendMessageRequest;
+  Reply: MessageService.SendMessageResponse | { error: string };
+}>('/message', async (request, reply) => {
+  const { userId, nodeId, content, targetNodeVersion } = request.body;
 
   if (!userId || !nodeId || !content || targetNodeVersion === undefined) {
     return reply.code(400).send({ error: 'Missing required fields' });

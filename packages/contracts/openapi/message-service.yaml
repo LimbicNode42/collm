@@ -1,0 +1,209 @@
+openapi: 3.0.0
+info:
+  title: Message Service API
+  version: 1.0.0
+  description: Handles message processing and queuing for the Collm system
+
+servers:
+  - url: http://localhost:3002
+    description: Development server
+  - url: http://message-service:3002
+    description: Docker container
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /message:
+    post:
+      summary: Send a message for adjudication
+      description: Creates a message and queues it for processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            example:
+              userId: "user-123"
+              nodeId: "node-456"
+              content: "What are neural networks?"
+              targetNodeVersion: 0
+      responses:
+        '202':
+          description: Message queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /message/{id}:
+    get:
+      summary: Get message by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Message ID
+      responses:
+        '200':
+          description: Message found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMessageResponse'
+        '404':
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /queue/pop:
+    get:
+      summary: Pop message from queue
+      description: Retrieves and removes the next message from the processing queue
+      responses:
+        '200':
+          description: Message retrieved from queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    $ref: '#/components/schemas/QueueMessage'
+        '404':
+          description: Queue is empty
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Queue is empty"
+
+components:
+  schemas:
+    SendMessageRequest:
+      type: object
+      required:
+        - userId
+        - nodeId
+        - content
+        - targetNodeVersion
+      properties:
+        userId:
+          type: string
+          description: ID of the user sending the message
+        nodeId:
+          type: string
+          description: ID of the target node
+        content:
+          type: string
+          description: Message content
+        targetNodeVersion:
+          type: integer
+          minimum: 0
+          description: Version of the target node
+
+    SendMessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          example: "Message queued for adjudication"
+        data:
+          type: object
+          properties:
+            messageId:
+              type: string
+
+    GetMessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          $ref: '#/components/schemas/Message'
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        userId:
+          type: string
+        nodeId:
+          type: string
+        targetNodeVersion:
+          type: integer
+        status:
+          type: string
+          enum: [PENDING, PROCESSED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    QueueMessage:
+      type: object
+      properties:
+        messageId:
+          type: string
+        nodeId:
+          type: string
+        targetNodeVersion:
+          type: integer
+        content:
+          type: string
+        userId:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message

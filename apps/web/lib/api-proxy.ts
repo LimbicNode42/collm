@@ -69,6 +69,9 @@ export async function proxyToService(
   const targetUrl = `${service.baseUrl}${targetPath}`;
   
   try {
+    // Log API calls for contract debugging
+    console.log(`[API Proxy] ${request.method} ${path} -> ${service.name} ${targetUrl}`);
+    
     // Forward the request to the target service
     const proxyRequest = new Request(targetUrl, {
       method: request.method,
@@ -80,6 +83,9 @@ export async function proxyToService(
 
     const response = await fetch(proxyRequest);
     
+    // Log response for contract debugging
+    console.log(`[API Proxy] ${service.name} responded with ${response.status}`);
+    
     // Forward the response back to the client
     return new Response(response.body, {
       status: response.status,
@@ -88,11 +94,12 @@ export async function proxyToService(
     });
     
   } catch (error) {
-    console.error(`Error proxying to ${service.name}:`, error);
+    console.error(`[API Proxy] Error proxying to ${service.name}:`, error);
     return new Response(
       JSON.stringify({ 
         error: 'Service unavailable', 
         service: service.name,
+        path: targetPath,
         details: error instanceof Error ? error.message : 'Unknown error'
       }),
       { 
