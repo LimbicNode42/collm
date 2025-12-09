@@ -5,6 +5,7 @@ const llm_1 = require("./llm");
 const vectorStore_1 = require("./vectorStore");
 const memory_1 = require("./memory");
 const database_1 = require("@collm/database");
+const factConversion_1 = require("../utils/factConversion");
 class LLMCoreEngine {
     async createNode(topic, initialDescription, model = 'claude-sonnet-4-5-20250929') {
         const initialMemory = memory_1.memoryManager.initializeMemory(topic, initialDescription);
@@ -14,7 +15,7 @@ class LLMCoreEngine {
                 description: initialDescription,
                 coreContext: initialMemory.coreContext,
                 workingMemory: initialMemory.workingMemory,
-                keyFacts: initialMemory.keyFacts,
+                keyFacts: (0, factConversion_1.serializeKeyFactsForDb)(initialMemory.keyFacts),
                 messageCount: initialMemory.messageCount,
                 lastSummaryAt: initialMemory.lastSummaryAt,
                 model,
@@ -28,7 +29,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: node.coreContext,
                 workingMemory: node.workingMemory,
-                keyFacts: node.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
                 messageCount: node.messageCount,
                 lastSummaryAt: node.lastSummaryAt,
             },
@@ -56,7 +57,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: node.coreContext,
                 workingMemory: node.workingMemory,
-                keyFacts: node.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
                 messageCount: node.messageCount,
                 lastSummaryAt: node.lastSummaryAt,
             },
@@ -77,7 +78,7 @@ class LLMCoreEngine {
             data: {
                 coreContext: updatedMemory.coreContext,
                 workingMemory: updatedMemory.workingMemory,
-                keyFacts: updatedMemory.keyFacts,
+                keyFacts: (0, factConversion_1.serializeKeyFactsForDb)(updatedMemory.keyFacts),
                 messageCount: updatedMemory.messageCount,
                 lastSummaryAt: updatedMemory.lastSummaryAt,
                 version: { increment: 1 },
@@ -90,7 +91,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: updatedNode.coreContext,
                 workingMemory: updatedNode.workingMemory,
-                keyFacts: updatedNode.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(updatedNode.keyFacts),
                 messageCount: updatedNode.messageCount,
                 lastSummaryAt: updatedNode.lastSummaryAt,
             },
@@ -114,7 +115,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: node.coreContext,
                 workingMemory: node.workingMemory,
-                keyFacts: node.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
                 messageCount: node.messageCount,
                 lastSummaryAt: node.lastSummaryAt,
             },
@@ -135,7 +136,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: node.coreContext,
                 workingMemory: node.workingMemory,
-                keyFacts: node.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
                 messageCount: node.messageCount,
                 lastSummaryAt: node.lastSummaryAt,
             },
@@ -151,7 +152,7 @@ class LLMCoreEngine {
             data: {
                 coreContext: memory.coreContext,
                 workingMemory: memory.workingMemory,
-                keyFacts: memory.keyFacts,
+                keyFacts: (0, factConversion_1.serializeKeyFactsForDb)(memory.keyFacts),
                 messageCount: memory.messageCount,
                 lastSummaryAt: memory.lastSummaryAt,
                 updatedAt: new Date(),
@@ -164,7 +165,7 @@ class LLMCoreEngine {
             memory: {
                 coreContext: updatedNode.coreContext,
                 workingMemory: updatedNode.workingMemory,
-                keyFacts: updatedNode.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(updatedNode.keyFacts),
                 messageCount: updatedNode.messageCount,
                 lastSummaryAt: updatedNode.lastSummaryAt,
             },

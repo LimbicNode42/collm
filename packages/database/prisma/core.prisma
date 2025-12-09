@@ -18,7 +18,7 @@ model Node {
   // Structured memory fields replacing simple 'state'
   coreContext       String   @db.Text  // The essential topic/conversation essence - never decays
   workingMemory     String   @db.Text  // Recent compressed state
-  keyFacts          String[] // Important extracted facts as array
+  keyFacts          Json[]   // Structured facts with confidence and metadata
   messageCount      Int      @default(0)
   lastSummaryAt     Int      @default(0)  // Message count when last summarized
   

@@ -1,6 +1,7 @@
 // LangChain integration for future enhancement
-import { Node, NodeMemory, Message } from '../types/domain';
+import { Node, NodeMemory, Message, KeyFact, FactSource } from '../types/domain';
 import { llmService } from './llm';
+import { longTermMemory } from './longTermMemory';
 
 export interface IMemoryManager {
   /**
@@ -34,14 +35,36 @@ export class HierarchicalMemoryManager implements IMemoryManager {
   private readonly MAX_TOKEN_ESTIMATE = 4000; // Rough token limit
 
   initializeMemory(topic: string, initialDescription: string): NodeMemory {
+    const initialFacts: KeyFact[] = [];
+    
+    // Create an initial fact from the description if provided
+    if (initialDescription && initialDescription.trim().length > 0) {
+      initialFacts.push({
+        id: `init-${Date.now()}`,
+        content: initialDescription,
+        confidence: this.CONFIDENCE_WEIGHTS[FactSource.USER_STATED],
+        source: FactSource.USER_STATED,
+        extractedAt: Date.now(),
+        supportingEvidence: ['Initial node description'],
+        embedding: undefined
+      });
+    }
+
     return {
       coreContext: `Topic: ${topic}\nInitial Context: ${initialDescription}`,
       workingMemory: `Starting conversation about: ${topic}`,
-      keyFacts: [],
+      keyFacts: initialFacts,
       messageCount: 0,
       lastSummaryAt: 0
     };
   }
+
+  private readonly CONFIDENCE_WEIGHTS = {
+    [FactSource.USER_STATED]: 0.9,
+    [FactSource.USER_CONFIRMED]: 1.0,
+    [FactSource.LLM_INFERRED]: 0.6,
+    [FactSource.IMPLICIT]: 0.4
+  };
 
   async addMessage(node: Node, message: Message, response?: string): Promise<NodeMemory> {
     const updatedMemory = { ...node.memory };
@@ -79,50 +102,48 @@ export class HierarchicalMemoryManager implements IMemoryManager {
   async compressMemory(node: Node, _recentMessages: Message[]): Promise<NodeMemory> {
     const memory = node.memory;
     
-    // Create compression prompt
+    console.log(`[Memory] Compressing memory for node ${node.id}. Current facts: ${memory.keyFacts.length}`);
+    
+    // Step 1: Use long-term memory service to extract and merge key facts
+    const updatedKeyFacts = await longTermMemory.extractAndMergeKeyFacts(
+      memory.keyFacts,
+      memory.workingMemory,
+      memory.coreContext
+    );
+
+    // Step 2: Create compressed summary of working memory
     const compressionPrompt = `
-You are a memory management system. Your task is to compress conversation history while preserving essential information.
+Compress the following working memory into a concise summary, preserving key insights and context:
 
-CORE CONTEXT (Never change this):
+CORE CONTEXT (for reference):
 ${memory.coreContext}
-
-CURRENT KEY FACTS:
-${memory.keyFacts.join('\n- ')}
 
 WORKING MEMORY TO COMPRESS:
 ${memory.workingMemory}
 
-Instructions:
-1. Preserve the core context exactly as is
-2. Extract any new key facts or insights 
-3. Create a concise summary of the working memory
-4. Focus on information that builds on the core topic
+Create a summary that:
+1. Captures the main themes and insights
+2. Preserves important context for future conversations
+3. Is concise but informative
+4. Builds upon the core context
 
-Respond with a JSON object:
-{
-  "keyFacts": ["fact1", "fact2", ...],
-  "compressedSummary": "concise summary of working memory"
-}
-`;
+Compressed Summary:`;
 
     try {
       const response = await llmService.generateCompletion(
         compressionPrompt,
-        "You are a precise memory compression system. Always respond with valid JSON.",
+        "You are a memory compression system. Create concise, informative summaries.",
         node.model
       );
 
-      const compressionResult = JSON.parse(response.content);
+      const compressedSummary = response.content.trim();
+      
+      console.log(`[Memory] Compression complete. Facts: ${memory.keyFacts.length} → ${updatedKeyFacts.length}`);
       
       return {
-        coreContext: memory.coreContext, // Never changes
-        workingMemory: compressionResult.compressedSummary,
-        keyFacts: [
-          ...memory.keyFacts,
-          ...compressionResult.keyFacts.filter((fact: string) => 
-            !memory.keyFacts.includes(fact)
-          )
-        ],
+        coreContext: memory.coreContext,
+        workingMemory: compressedSummary,
+        keyFacts: updatedKeyFacts,
         messageCount: memory.messageCount,
         lastSummaryAt: memory.messageCount
       };
@@ -143,7 +164,12 @@ Respond with a JSON object:
     let context = `${memory.coreContext}\n\n`;
     
     if (memory.keyFacts.length > 0) {
-      context += `Key Facts:\n${memory.keyFacts.map(fact => `- ${fact}`).join('\n')}\n\n`;
+      context += `Key Facts:\n${memory.keyFacts
+        .filter(fact => fact.confidence > 0.3) // Only include facts with reasonable confidence
+        .sort((a, b) => b.confidence - a.confidence) // Sort by confidence
+        .slice(0, 10) // Limit to top 10 facts
+        .map(fact => `- ${fact.content} (confidence: ${fact.confidence.toFixed(2)})`)
+        .join('\n')}\n\n`;
     }
     
     context += `Recent Context:\n${memory.workingMemory}`;

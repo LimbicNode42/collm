@@ -1,17 +1,37 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.memoryManager = exports.HierarchicalMemoryManager = void 0;
+const domain_1 = require("../types/domain");
 const llm_1 = require("./llm");
+const longTermMemory_1 = require("./longTermMemory");
 class HierarchicalMemoryManager {
     constructor() {
         this.WORKING_MEMORY_LIMIT = 20;
         this.MAX_TOKEN_ESTIMATE = 4000;
+        this.CONFIDENCE_WEIGHTS = {
+            [domain_1.FactSource.USER_STATED]: 0.9,
+            [domain_1.FactSource.USER_CONFIRMED]: 1.0,
+            [domain_1.FactSource.LLM_INFERRED]: 0.6,
+            [domain_1.FactSource.IMPLICIT]: 0.4
+        };
     }
     initializeMemory(topic, initialDescription) {
+        const initialFacts = [];
+        if (initialDescription && initialDescription.trim().length > 0) {
+            initialFacts.push({
+                id: `init-${Date.now()}`,
+                content: initialDescription,
+                confidence: this.CONFIDENCE_WEIGHTS[domain_1.FactSource.USER_STATED],
+                source: domain_1.FactSource.USER_STATED,
+                extractedAt: Date.now(),
+                supportingEvidence: ['Initial node description'],
+                embedding: undefined
+            });
+        }
         return {
             coreContext: `Topic: ${topic}\nInitial Context: ${initialDescription}`,
             workingMemory: `Starting conversation about: ${topic}`,
-            keyFacts: [],
+            keyFacts: initialFacts,
             messageCount: 0,
             lastSummaryAt: 0
         };
@@ -40,40 +60,32 @@ class HierarchicalMemoryManager {
     }
     async compressMemory(node, _recentMessages) {
         const memory = node.memory;
+        console.log(`[Memory] Compressing memory for node ${node.id}. Current facts: ${memory.keyFacts.length}`);
+        const updatedKeyFacts = await longTermMemory_1.longTermMemory.extractAndMergeKeyFacts(memory.keyFacts, memory.workingMemory, memory.coreContext);
         const compressionPrompt = `
-You are a memory management system. Your task is to compress conversation history while preserving essential information.
+Compress the following working memory into a concise summary, preserving key insights and context:
 
-CORE CONTEXT (Never change this):
+CORE CONTEXT (for reference):
 ${memory.coreContext}
-
-CURRENT KEY FACTS:
-${memory.keyFacts.join('\n- ')}
 
 WORKING MEMORY TO COMPRESS:
 ${memory.workingMemory}
 
-Instructions:
-1. Preserve the core context exactly as is
-2. Extract any new key facts or insights 
-3. Create a concise summary of the working memory
-4. Focus on information that builds on the core topic
+Create a summary that:
+1. Captures the main themes and insights
+2. Preserves important context for future conversations
+3. Is concise but informative
+4. Builds upon the core context
 
-Respond with a JSON object:
-{
-  "keyFacts": ["fact1", "fact2", ...],
-  "compressedSummary": "concise summary of working memory"
-}
-`;
+Compressed Summary:`;
         try {
-            const response = await llm_1.llmService.generateCompletion(compressionPrompt, "You are a precise memory compression system. Always respond with valid JSON.", node.model);
-            const compressionResult = JSON.parse(response.content);
+            const response = await llm_1.llmService.generateCompletion(compressionPrompt, "You are a memory compression system. Create concise, informative summaries.", node.model);
+            const compressedSummary = response.content.trim();
+            console.log(`[Memory] Compression complete. Facts: ${memory.keyFacts.length} → ${updatedKeyFacts.length}`);
             return {
                 coreContext: memory.coreContext,
-                workingMemory: compressionResult.compressedSummary,
-                keyFacts: [
-                    ...memory.keyFacts,
-                    ...compressionResult.keyFacts.filter((fact) => !memory.keyFacts.includes(fact))
-                ],
+                workingMemory: compressedSummary,
+                keyFacts: updatedKeyFacts,
                 messageCount: memory.messageCount,
                 lastSummaryAt: memory.messageCount
             };
@@ -87,7 +99,12 @@ Respond with a JSON object:
         const memory = node.memory;
         let context = `${memory.coreContext}\n\n`;
         if (memory.keyFacts.length > 0) {
-            context += `Key Facts:\n${memory.keyFacts.map(fact => `- ${fact}`).join('\n')}\n\n`;
+            context += `Key Facts:\n${memory.keyFacts
+                .filter(fact => fact.confidence > 0.3)
+                .sort((a, b) => b.confidence - a.confidence)
+                .slice(0, 10)
+                .map(fact => `- ${fact.content} (confidence: ${fact.confidence.toFixed(2)})`)
+                .join('\n')}\n\n`;
         }
         context += `Recent Context:\n${memory.workingMemory}`;
         if (recentMessages.length > 0) {

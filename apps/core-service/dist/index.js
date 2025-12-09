@@ -11,6 +11,7 @@ const llm_1 = require("./services/llm");
 const memory_1 = require("./services/memory");
 const database_1 = require("@collm/database");
 const domain_1 = require("./types/domain");
+const factConversion_1 = require("./utils/factConversion");
 const fastify = (0, fastify_1.default)({
     logger: true
 });
@@ -34,7 +35,7 @@ fastify.get('/health', async (request, reply) => {
     }
 });
 fastify.post('/nodes', async (request, reply) => {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f;
     const { topic, description, model } = request.body;
     if (!topic) {
         return reply.code(400).send({ error: 'Topic is required' });
@@ -49,9 +50,9 @@ fastify.post('/nodes', async (request, reply) => {
             memory: {
                 coreContext: ((_a = node.memory) === null || _a === void 0 ? void 0 : _a.coreContext) || '',
                 workingMemory: ((_b = node.memory) === null || _b === void 0 ? void 0 : _b.workingMemory) || '',
-                keyFacts: ((_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) || [],
-                messageCount: ((_d = node.memory) === null || _d === void 0 ? void 0 : _d.messageCount) || 0,
-                lastSummaryAt: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+                keyFacts: ((_d = (_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) === null || _d === void 0 ? void 0 : _d.map(fact => fact.content)) || [],
+                messageCount: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.messageCount) || 0,
+                lastSummaryAt: ((_f = node.memory) === null || _f === void 0 ? void 0 : _f.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
             },
             createdAt: node.createdAt.toISOString(),
             updatedAt: node.updatedAt.toISOString(),
@@ -68,7 +69,7 @@ fastify.get('/nodes', async (request, reply) => {
         const { limit = 10, offset = 0 } = request.query;
         const dbNodes = await core_1.coreEngine.listNodes();
         const nodes = dbNodes.map(node => {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             return ({
                 id: node.id,
                 topic: node.topic,
@@ -77,9 +78,9 @@ fastify.get('/nodes', async (request, reply) => {
                 memory: {
                     coreContext: ((_a = node.memory) === null || _a === void 0 ? void 0 : _a.coreContext) || '',
                     workingMemory: ((_b = node.memory) === null || _b === void 0 ? void 0 : _b.workingMemory) || '',
-                    keyFacts: ((_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) || [],
-                    messageCount: ((_d = node.memory) === null || _d === void 0 ? void 0 : _d.messageCount) || 0,
-                    lastSummaryAt: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+                    keyFacts: ((_d = (_c = node.memory) === null || _c === void 0 ? void 0 : _c.keyFacts) === null || _d === void 0 ? void 0 : _d.map(fact => fact.content)) || [],
+                    messageCount: ((_e = node.memory) === null || _e === void 0 ? void 0 : _e.messageCount) || 0,
+                    lastSummaryAt: ((_f = node.memory) === null || _f === void 0 ? void 0 : _f.lastSummaryAt) ? new Date(node.memory.lastSummaryAt).toISOString() : null,
                 },
                 createdAt: node.createdAt.toISOString(),
                 updatedAt: node.updatedAt.toISOString(),
@@ -263,7 +264,7 @@ async function processMessage() {
             memory: {
                 coreContext: node.coreContext,
                 workingMemory: node.workingMemory,
-                keyFacts: node.keyFacts,
+                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
                 messageCount: node.messageCount,
                 lastSummaryAt: node.lastSummaryAt,
             },

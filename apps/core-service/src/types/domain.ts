@@ -1,10 +1,28 @@
 // Domain models for the Core Service
 // These are internal to this service and should not be shared with other services
 
+export enum FactSource {
+  USER_STATED = 'USER_STATED',
+  USER_CONFIRMED = 'USER_CONFIRMED', 
+  LLM_INFERRED = 'LLM_INFERRED',
+  IMPLICIT = 'IMPLICIT'
+}
+
+export interface KeyFact {
+  id: string;
+  content: string;
+  confidence: number;
+  source: FactSource;
+  extractedAt: number;
+  lastConfirmedAt?: number;
+  supportingEvidence: string[];
+  embedding?: number[];  // For semantic similarity
+}
+
 export interface NodeMemory {
   coreContext: string;      // The essential topic/conversation essence - never decays
   workingMemory: string;    // Recent compressed state  
-  keyFacts: string[];       // Important extracted facts
+  keyFacts: KeyFact[];      // Structured facts with confidence and metadata
   messageCount: number;
   lastSummaryAt: number;    // Message count when last summarized
 }

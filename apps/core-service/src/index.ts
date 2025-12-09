@@ -7,6 +7,7 @@ import { memoryManager } from './services/memory';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
+import { parseKeyFactsFromDb } from './utils/factConversion';
 
 // HTTP Server for Node Management
 const fastify = Fastify({
@@ -63,7 +64,7 @@ fastify.post<{
       memory: {
         coreContext: node.memory?.coreContext || '',
         workingMemory: node.memory?.workingMemory || '',
-        keyFacts: node.memory?.keyFacts || [],
+        keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
         messageCount: node.memory?.messageCount || 0,
         lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
       },
@@ -95,7 +96,7 @@ fastify.get<{
       memory: {
         coreContext: node.memory?.coreContext || '',
         workingMemory: node.memory?.workingMemory || '',
-        keyFacts: node.memory?.keyFacts || [],
+        keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
         messageCount: node.memory?.messageCount || 0,
         lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
       },
@@ -323,7 +324,7 @@ async function processMessage() {
       memory: {
         coreContext: node.coreContext,
         workingMemory: node.workingMemory,
-        keyFacts: node.keyFacts,
+        keyFacts: parseKeyFactsFromDb(node.keyFacts),
         messageCount: node.messageCount,
         lastSummaryAt: node.lastSummaryAt,
       },

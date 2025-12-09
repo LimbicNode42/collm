@@ -16,11 +16,11 @@ model Node {
   description String?
 
   // Structured memory fields replacing simple 'state'
-  coreContext   String   @db.Text // The essential topic/conversation essence - never decays
-  workingMemory String   @db.Text // Recent compressed state
-  keyFacts      String[] // Important extracted facts as array
-  messageCount  Int      @default(0)
-  lastSummaryAt Int      @default(0) // Message count when last summarized
+  coreContext   String @db.Text // The essential topic/conversation essence - never decays
+  workingMemory String @db.Text // Recent compressed state
+  keyFacts      Json[] // Structured facts with confidence and metadata
+  messageCount  Int    @default(0)
+  lastSummaryAt Int    @default(0) // Message count when last summarized
 
   embedding Unsupported("vector(1536)")?
   model     String                       @default("claude-sonnet-4-5-20250929")

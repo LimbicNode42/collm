@@ -3,6 +3,7 @@ import { llmService } from './llm';
 import { vectorStore } from './vectorStore';
 import { memoryManager } from './memory';
 import { prismaCore, CoreTypes } from '@collm/database';
+import { parseKeyFactsFromDb, serializeKeyFactsForDb } from '../utils/factConversion';
 
 export interface ICoreEngine {
   /**
@@ -43,7 +44,7 @@ export class LLMCoreEngine implements ICoreEngine {
         description: initialDescription,
         coreContext: initialMemory.coreContext,
         workingMemory: initialMemory.workingMemory,
-        keyFacts: initialMemory.keyFacts,
+        keyFacts: serializeKeyFactsForDb(initialMemory.keyFacts),
         messageCount: initialMemory.messageCount,
         lastSummaryAt: initialMemory.lastSummaryAt,
         model,
@@ -58,7 +59,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: node.coreContext,
         workingMemory: node.workingMemory,
-        keyFacts: node.keyFacts,
+        keyFacts: parseKeyFactsFromDb(node.keyFacts),
         messageCount: node.messageCount,
         lastSummaryAt: node.lastSummaryAt,
       },
@@ -94,7 +95,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: node.coreContext,
         workingMemory: node.workingMemory,
-        keyFacts: node.keyFacts,
+        keyFacts: parseKeyFactsFromDb(node.keyFacts),
         messageCount: node.messageCount,
         lastSummaryAt: node.lastSummaryAt,
       },
@@ -126,7 +127,7 @@ export class LLMCoreEngine implements ICoreEngine {
       data: {
         coreContext: updatedMemory.coreContext,
         workingMemory: updatedMemory.workingMemory,
-        keyFacts: updatedMemory.keyFacts,
+        keyFacts: serializeKeyFactsForDb(updatedMemory.keyFacts),
         messageCount: updatedMemory.messageCount,
         lastSummaryAt: updatedMemory.lastSummaryAt,
         version: { increment: 1 },
@@ -140,7 +141,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: updatedNode.coreContext,
         workingMemory: updatedNode.workingMemory,
-        keyFacts: updatedNode.keyFacts,
+        keyFacts: parseKeyFactsFromDb(updatedNode.keyFacts),
         messageCount: updatedNode.messageCount,
         lastSummaryAt: updatedNode.lastSummaryAt,
       },
@@ -167,7 +168,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: node.coreContext,
         workingMemory: node.workingMemory,
-        keyFacts: node.keyFacts,
+        keyFacts: parseKeyFactsFromDb(node.keyFacts),
         messageCount: node.messageCount,
         lastSummaryAt: node.lastSummaryAt,
       },
@@ -190,7 +191,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: node.coreContext,
         workingMemory: node.workingMemory,
-        keyFacts: node.keyFacts,
+        keyFacts: parseKeyFactsFromDb(node.keyFacts),
         messageCount: node.messageCount,
         lastSummaryAt: node.lastSummaryAt,
       },
@@ -207,7 +208,7 @@ export class LLMCoreEngine implements ICoreEngine {
       data: {
         coreContext: memory.coreContext,
         workingMemory: memory.workingMemory,
-        keyFacts: memory.keyFacts,
+        keyFacts: serializeKeyFactsForDb(memory.keyFacts),
         messageCount: memory.messageCount,
         lastSummaryAt: memory.lastSummaryAt,
         updatedAt: new Date(),
@@ -221,7 +222,7 @@ export class LLMCoreEngine implements ICoreEngine {
       memory: {
         coreContext: updatedNode.coreContext,
         workingMemory: updatedNode.workingMemory,
-        keyFacts: updatedNode.keyFacts,
+        keyFacts: parseKeyFactsFromDb(updatedNode.keyFacts),
         messageCount: updatedNode.messageCount,
         lastSummaryAt: updatedNode.lastSummaryAt,
       },

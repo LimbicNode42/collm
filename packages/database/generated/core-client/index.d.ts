@@ -1176,7 +1176,7 @@ export namespace Prisma {
     description: string | null
     coreContext: string
     workingMemory: string
-    keyFacts: string[]
+    keyFacts: JsonValue[]
     messageCount: number
     lastSummaryAt: number
     model: string
@@ -1268,7 +1268,7 @@ export namespace Prisma {
       description: string | null
       coreContext: string
       workingMemory: string
-      keyFacts: string[]
+      keyFacts: Prisma.JsonValue[]
       messageCount: number
       lastSummaryAt: number
       model: string
@@ -1674,7 +1674,7 @@ export namespace Prisma {
     readonly description: FieldRef<"Node", 'String'>
     readonly coreContext: FieldRef<"Node", 'String'>
     readonly workingMemory: FieldRef<"Node", 'String'>
-    readonly keyFacts: FieldRef<"Node", 'String[]'>
+    readonly keyFacts: FieldRef<"Node", 'Json[]'>
     readonly messageCount: FieldRef<"Node", 'Int'>
     readonly lastSummaryAt: FieldRef<"Node", 'Int'>
     readonly model: FieldRef<"Node", 'String'>
@@ -3109,6 +3109,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'Json[]'
+   */
+  export type ListJsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Json'
+   */
+  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+  /**
    * Reference to a field of type 'Int'
    */
   export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -3162,7 +3176,7 @@ export namespace Prisma {
     description?: StringNullableFilter<"Node"> | string | null
     coreContext?: StringFilter<"Node"> | string
     workingMemory?: StringFilter<"Node"> | string
-    keyFacts?: StringNullableListFilter<"Node">
+    keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntFilter<"Node"> | number
     lastSummaryAt?: IntFilter<"Node"> | number
     model?: StringFilter<"Node"> | string
@@ -3197,7 +3211,7 @@ export namespace Prisma {
     description?: StringNullableFilter<"Node"> | string | null
     coreContext?: StringFilter<"Node"> | string
     workingMemory?: StringFilter<"Node"> | string
-    keyFacts?: StringNullableListFilter<"Node">
+    keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntFilter<"Node"> | number
     lastSummaryAt?: IntFilter<"Node"> | number
     model?: StringFilter<"Node"> | string
@@ -3236,7 +3250,7 @@ export namespace Prisma {
     description?: StringNullableWithAggregatesFilter<"Node"> | string | null
     coreContext?: StringWithAggregatesFilter<"Node"> | string
     workingMemory?: StringWithAggregatesFilter<"Node"> | string
-    keyFacts?: StringNullableListFilter<"Node">
+    keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntWithAggregatesFilter<"Node"> | number
     lastSummaryAt?: IntWithAggregatesFilter<"Node"> | number
     model?: StringWithAggregatesFilter<"Node"> | string
@@ -3318,7 +3332,7 @@ export namespace Prisma {
     description?: string | null
     coreContext: string
     workingMemory: string
-    keyFacts?: NodeCreatekeyFactsInput | string[]
+    keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
     model?: string
@@ -3334,7 +3348,7 @@ export namespace Prisma {
     description?: string | null
     coreContext: string
     workingMemory: string
-    keyFacts?: NodeCreatekeyFactsInput | string[]
+    keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
     model?: string
@@ -3350,7 +3364,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string
@@ -3366,7 +3380,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string
@@ -3382,7 +3396,7 @@ export namespace Prisma {
     description?: string | null
     coreContext: string
     workingMemory: string
-    keyFacts?: NodeCreatekeyFactsInput | string[]
+    keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
     model?: string
@@ -3397,7 +3411,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string
@@ -3412,7 +3426,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string
@@ -3519,12 +3533,18 @@ export namespace Prisma {
     mode?: QueryMode
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
+  export type JsonNullableListFilter<$PrismaModel = never> = 
+    | PatchUndefined<
+        Either<Required<JsonNullableListFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonNullableListFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonNullableListFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonNullableListFilterBase<$PrismaModel>>, 'path'>>
 
-  export type StringNullableListFilter<$PrismaModel = never> = {
-    equals?: string[] | ListStringFieldRefInput<$PrismaModel> | null
-    has?: string | StringFieldRefInput<$PrismaModel> | null
-    hasEvery?: string[] | ListStringFieldRefInput<$PrismaModel>
-    hasSome?: string[] | ListStringFieldRefInput<$PrismaModel>
+  export type JsonNullableListFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue[] | ListJsonFieldRefInput<$PrismaModel> | null
+    has?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    hasEvery?: InputJsonValue[] | ListJsonFieldRefInput<$PrismaModel>
+    hasSome?: InputJsonValue[] | ListJsonFieldRefInput<$PrismaModel>
     isEmpty?: boolean
   }
 
@@ -3730,7 +3750,7 @@ export namespace Prisma {
   }
 
   export type NodeCreatekeyFactsInput = {
-    set: string[]
+    set: InputJsonValue[]
   }
 
   export type MessageCreateNestedManyWithoutNodeInput = {
@@ -3756,8 +3776,8 @@ export namespace Prisma {
   }
 
   export type NodeUpdatekeyFactsInput = {
-    set?: string[]
-    push?: string | string[]
+    set?: InputJsonValue[]
+    push?: InputJsonValue | InputJsonValue[]
   }
 
   export type IntFieldUpdateOperationsInput = {
@@ -4013,7 +4033,7 @@ export namespace Prisma {
     description?: string | null
     coreContext: string
     workingMemory: string
-    keyFacts?: NodeCreatekeyFactsInput | string[]
+    keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
     model?: string
@@ -4028,7 +4048,7 @@ export namespace Prisma {
     description?: string | null
     coreContext: string
     workingMemory: string
-    keyFacts?: NodeCreatekeyFactsInput | string[]
+    keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
     model?: string
@@ -4059,7 +4079,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string
@@ -4074,7 +4094,7 @@ export namespace Prisma {
     description?: NullableStringFieldUpdateOperationsInput | string | null
     coreContext?: StringFieldUpdateOperationsInput | string
     workingMemory?: StringFieldUpdateOperationsInput | string
-    keyFacts?: NodeUpdatekeyFactsInput | string[]
+    keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
     model?: StringFieldUpdateOperationsInput | string

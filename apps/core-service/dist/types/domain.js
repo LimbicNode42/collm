@@ -1,6 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MessageStatus = void 0;
+exports.MessageStatus = exports.FactSource = void 0;
+var FactSource;
+(function (FactSource) {
+    FactSource["USER_STATED"] = "USER_STATED";
+    FactSource["USER_CONFIRMED"] = "USER_CONFIRMED";
+    FactSource["LLM_INFERRED"] = "LLM_INFERRED";
+    FactSource["IMPLICIT"] = "IMPLICIT";
+})(FactSource || (exports.FactSource = FactSource = {}));
 var MessageStatus;
 (function (MessageStatus) {
     MessageStatus["PENDING"] = "PENDING";
