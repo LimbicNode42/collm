@@ -364,13 +364,14 @@ export default function TestPage() {
         return;
       }
       
-      const result = await memoryApiCall('sendMemoryMessage', '/api/messages', {
+      const result = await memoryApiCall('sendMemoryMessage', '/api/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           content: message,
           nodeId,
-          userId: 'test-user-' + Date.now()
+          userId: 'test-user-' + Date.now(),
+          targetNodeVersion: 0
         })
       });
       

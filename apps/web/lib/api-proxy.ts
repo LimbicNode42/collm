@@ -21,7 +21,7 @@ const SERVICES: ServiceConfig[] = [
   {
     name: 'message-service', 
     baseUrl: process.env.MESSAGE_SERVICE_URL || 'http://message-service:3002',
-    pathPatterns: ['/messages', '/queue']
+    pathPatterns: ['/message', '/messages', '/queue']
   },
   {
     name: 'user-service',
