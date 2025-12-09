@@ -6,7 +6,7 @@ const llm_1 = require("./llm");
 const longTermMemory_1 = require("./longTermMemory");
 class HierarchicalMemoryManager {
     constructor() {
-        this.WORKING_MEMORY_LIMIT = 20;
+        this.WORKING_MEMORY_LIMIT = 5;
         this.MAX_TOKEN_ESTIMATE = 4000;
         this.CONFIDENCE_WEIGHTS = {
             [domain_1.FactSource.USER_STATED]: 0.9,

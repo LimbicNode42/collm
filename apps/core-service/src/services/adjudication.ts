@@ -48,7 +48,8 @@ Respond with a JSON object in the following format:
     try {
       const response = await llmService.generateCompletion(prompt, systemPrompt, node.model);
       // Basic parsing - in production, use a more robust JSON parser or structured output mode
-      const result = JSON.parse(response.content);
+      const cleanedResponse = response.content.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+      const result = JSON.parse(cleanedResponse);
 
       return {
         messageId: message.id,

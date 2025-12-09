@@ -51,6 +51,20 @@ export class SemanticLongTermMemory implements ILongTermMemory {
     [FactSource.IMPLICIT]: 0.4
   };
 
+  /**
+   * Cleans LLM response to extract valid JSON from markdown code blocks
+   */
+  private cleanJsonResponse(response: string): string {
+    // Remove markdown code blocks if present
+    const cleaned = response
+      .trim()
+      .replace(/^```(?:json)?\s*/, '') // Remove opening code block
+      .replace(/\s*```$/, '')         // Remove closing code block
+      .trim();
+    
+    return cleaned;
+  }
+
   async extractAndMergeKeyFacts(
     existingFacts: KeyFact[], 
     workingMemory: string, 
@@ -180,7 +194,8 @@ JSON array:`;
 
     try {
       const response = await llmService.generateCompletion(prompt, 'You are a fact extraction system. Return only valid JSON.');
-      const facts = JSON.parse(response.content.trim());
+      const cleanedResponse = this.cleanJsonResponse(response.content);
+      const facts = JSON.parse(cleanedResponse);
       
       return Array.isArray(facts) ? facts.map(fact => ({
         content: fact.content || '',

@@ -31,7 +31,7 @@ export interface IMemoryManager {
 }
 
 export class HierarchicalMemoryManager implements IMemoryManager {
-  private readonly WORKING_MEMORY_LIMIT = 20; // Messages before compression
+  private readonly WORKING_MEMORY_LIMIT = 5; // Messages before compression
   private readonly MAX_TOKEN_ESTIMATE = 4000; // Rough token limit
 
   initializeMemory(topic: string, initialDescription: string): NodeMemory {

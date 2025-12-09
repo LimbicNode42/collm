@@ -36,7 +36,8 @@ Respond with a JSON object in the following format:
         const systemPrompt = "You are an expert conversation moderator. Always respond with valid JSON in the exact format requested.";
         try {
             const response = await llm_1.llmService.generateCompletion(prompt, systemPrompt, node.model);
-            const result = JSON.parse(response.content);
+            const cleanedResponse = response.content.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+            const result = JSON.parse(cleanedResponse);
             return {
                 messageId: message.id,
                 isRelevant: result.isRelevant,

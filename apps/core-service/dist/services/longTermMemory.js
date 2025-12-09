@@ -22,6 +22,14 @@ class SemanticLongTermMemory {
             [domain_1.FactSource.IMPLICIT]: 0.4
         };
     }
+    cleanJsonResponse(response) {
+        const cleaned = response
+            .trim()
+            .replace(/^```(?:json)?\s*/, '')
+            .replace(/\s*```$/, '')
+            .trim();
+        return cleaned;
+    }
     async extractAndMergeKeyFacts(existingFacts, workingMemory, coreContext) {
         const candidateFacts = await this.extractCandidateFacts(workingMemory, coreContext);
         const mergedFacts = [...existingFacts];
@@ -118,7 +126,8 @@ Return a JSON array of objects with this structure:
 JSON array:`;
         try {
             const response = await llm_1.llmService.generateCompletion(prompt, 'You are a fact extraction system. Return only valid JSON.');
-            const facts = JSON.parse(response.content.trim());
+            const cleanedResponse = this.cleanJsonResponse(response.content);
+            const facts = JSON.parse(cleanedResponse);
             return Array.isArray(facts) ? facts.map(fact => ({
                 content: fact.content || '',
                 confidence: Math.max(0, Math.min(1, fact.confidence || this.CONFIDENCE_WEIGHTS[domain_1.FactSource.LLM_INFERRED])),
