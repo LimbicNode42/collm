@@ -369,33 +369,35 @@ export default function TestPage() {
         return;
       }
       
-      const requestBody: { userId: string; nodeId: string; content: string; targetNodeVersion: number } = { 
-        content: message,
+      const requestBody = { 
         nodeId,
-        userId: 'test-user-' + Date.now(),
-        targetNodeVersion: 1
+        message,
+        model: 'claude-sonnet-4-5-20250929'
       };
       
-      const result = await memoryApiCall('sendMemoryMessage', '/api/message', {
+      const result = await memoryApiCall('sendMemoryMessage', '/api/llm/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       });
       
-      // Add to conversation history for display
+      // Add user message to conversation history
       setConversationHistory(prev => [...prev, {
         type: 'user',
         content: message,
         timestamp: new Date().toLocaleTimeString()
       }]);
       
-      // Add response if available
+      // Add assistant response if available
       if (result.success && 'data' in result && result.data?.response) {
         setConversationHistory(prev => [...prev, {
           type: 'assistant',
           content: result.data.response,
           timestamp: new Date().toLocaleTimeString()
         }]);
+        
+        // Clear the message input for next message
+        setMessage('');
       }
       
       setMessage('');

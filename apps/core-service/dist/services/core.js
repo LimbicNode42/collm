@@ -145,6 +145,35 @@ class LLMCoreEngine {
             updatedAt: node.updatedAt,
         }));
     }
+    async updateNodeMemory(nodeId, memory) {
+        const updatedNode = await database_1.prismaCore.node.update({
+            where: { id: nodeId },
+            data: {
+                coreContext: memory.coreContext,
+                workingMemory: memory.workingMemory,
+                keyFacts: memory.keyFacts,
+                messageCount: memory.messageCount,
+                lastSummaryAt: memory.lastSummaryAt,
+                updatedAt: new Date(),
+            }
+        });
+        return {
+            id: updatedNode.id,
+            topic: updatedNode.topic,
+            description: updatedNode.description || undefined,
+            memory: {
+                coreContext: updatedNode.coreContext,
+                workingMemory: updatedNode.workingMemory,
+                keyFacts: updatedNode.keyFacts,
+                messageCount: updatedNode.messageCount,
+                lastSummaryAt: updatedNode.lastSummaryAt,
+            },
+            model: updatedNode.model,
+            version: updatedNode.version,
+            createdAt: updatedNode.createdAt,
+            updatedAt: updatedNode.updatedAt,
+        };
+    }
 }
 exports.LLMCoreEngine = LLMCoreEngine;
 exports.coreEngine = new LLMCoreEngine();

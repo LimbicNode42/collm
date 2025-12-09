@@ -1,4 +1,4 @@
-import { Node, Message } from '../types/domain';
+import { Node, Message, NodeMemory } from '../types/domain';
 import { llmService } from './llm';
 import { vectorStore } from './vectorStore';
 import { memoryManager } from './memory';
@@ -25,6 +25,11 @@ export interface ICoreEngine {
    * Lists all available nodes.
    */
   listNodes(): Promise<Node[]>;
+  
+  /**
+   * Updates the memory of a node directly.
+   */
+  updateNodeMemory(nodeId: string, memory: NodeMemory): Promise<Node>;
 }
 
 export class LLMCoreEngine implements ICoreEngine {
@@ -194,6 +199,37 @@ export class LLMCoreEngine implements ICoreEngine {
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
     }));
+  }
+
+  async updateNodeMemory(nodeId: string, memory: NodeMemory): Promise<Node> {
+    const updatedNode = await prismaCore.node.update({
+      where: { id: nodeId },
+      data: {
+        coreContext: memory.coreContext,
+        workingMemory: memory.workingMemory,
+        keyFacts: memory.keyFacts,
+        messageCount: memory.messageCount,
+        lastSummaryAt: memory.lastSummaryAt,
+        updatedAt: new Date(),
+      }
+    }) as CoreTypes.Node;
+
+    return {
+      id: updatedNode.id,
+      topic: updatedNode.topic,
+      description: updatedNode.description || undefined,
+      memory: {
+        coreContext: updatedNode.coreContext,
+        workingMemory: updatedNode.workingMemory,
+        keyFacts: updatedNode.keyFacts,
+        messageCount: updatedNode.messageCount,
+        lastSummaryAt: updatedNode.lastSummaryAt,
+      },
+      model: updatedNode.model,
+      version: updatedNode.version,
+      createdAt: updatedNode.createdAt,
+      updatedAt: updatedNode.updatedAt,
+    };
   }
 }
 

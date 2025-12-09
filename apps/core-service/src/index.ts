@@ -3,6 +3,7 @@ import { messageQueue } from './services/queue';
 import { adjudicationEngine } from './services/adjudication';
 import { coreEngine } from './services/core';
 import { llmService } from './services/llm';
+import { memoryManager } from './services/memory';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
@@ -161,6 +162,84 @@ fastify.post('/llm/test', async (request, reply) => {
     request.log.error('LLM test error:', error);
     return reply.code(500).send({ 
       error: 'Failed to generate LLM response',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Conversational memory testing endpoint
+fastify.post('/llm/chat', async (request, reply) => {
+  const body = request.body as any;
+  const { nodeId, message, model } = body;
+
+  if (!nodeId || !message) {
+    return reply.code(400).send({ error: 'nodeId and message are required' });
+  }
+
+  try {
+    // 1. Get the node with its memory
+    const node = await coreEngine.getNode(nodeId);
+    if (!node) {
+      return reply.code(404).send({ error: 'Node not found' });
+    }
+
+    // 2. Build context from node's memory
+    const systemPrompt = `You are an AI assistant having a focused conversation about the following topic.
+
+${node.memory?.coreContext || ''}
+
+CURRENT CONTEXT:
+${node.memory?.workingMemory || 'Starting conversation'}
+
+KEY FACTS TO REMEMBER:
+${node.memory?.keyFacts?.join('\n- ') || 'None yet'}
+
+Stay focused on the core topic while being helpful and engaging. Build upon previous context naturally.`;
+
+    // 3. Generate LLM response
+    const startTime = Date.now();
+    const llmResponse = await llmService.generateCompletion(
+      message,
+      systemPrompt,
+      model || node.model || 'claude-sonnet-4-5-20250929'
+    );
+    const duration = Date.now() - startTime;
+
+    // 4. Create a temporary message object for memory update
+    const tempMessage = {
+      id: `temp-${Date.now()}`,
+      content: message,
+      userId: 'memory-test-user',
+      nodeId: nodeId,
+      targetNodeVersion: node.version,
+      status: MessageStatus.ACCEPTED,
+      createdAt: new Date()
+    };
+
+    // 5. Update node memory with this conversation turn
+    const updatedMemory = await memoryManager.addMessage(node, tempMessage, llmResponse.content);
+
+    // 6. Save the updated memory to database
+    const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
+
+    return reply.send({
+      success: true,
+      response: llmResponse.content,
+      node: {
+        id: updatedNode.id,
+        topic: updatedNode.topic,
+        memory: updatedNode.memory,
+        messageCount: updatedMemory.messageCount
+      },
+      usage: llmResponse.usage,
+      model: model || node.model,
+      duration,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    request.log.error('LLM chat error:', error);
+    return reply.code(500).send({ 
+      error: 'Failed to process chat message',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
