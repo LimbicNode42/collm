@@ -127,7 +127,9 @@ Return a JSON array of objects with this structure:
 JSON array:`;
         try {
             const response = await llm_1.llmService.generateCompletion(prompt, 'You are a fact extraction system. Return only valid JSON.');
+            console.log('[LongTermMemory] Raw LLM response:', response.content.substring(0, 200));
             const cleanedResponse = this.cleanJsonResponse(response.content);
+            console.log('[LongTermMemory] Cleaned response:', cleanedResponse.substring(0, 200));
             const facts = JSON.parse(cleanedResponse);
             return Array.isArray(facts) ? facts.map(fact => ({
                 content: fact.content || '',
