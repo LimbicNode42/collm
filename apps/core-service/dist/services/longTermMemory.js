@@ -28,6 +28,7 @@ class SemanticLongTermMemory {
             .replace(/^```(?:json)?\s*/, '')
             .replace(/\s*```$/, '')
             .trim();
+        console.log('[LongTermMemory] Cleaning JSON response. Original length:', response.length, 'Cleaned length:', cleaned.length);
         return cleaned;
     }
     async extractAndMergeKeyFacts(existingFacts, workingMemory, coreContext) {

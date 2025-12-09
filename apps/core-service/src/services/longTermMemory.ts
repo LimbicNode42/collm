@@ -62,6 +62,7 @@ export class SemanticLongTermMemory implements ILongTermMemory {
       .replace(/\s*```$/, '')         // Remove closing code block
       .trim();
     
+    console.log('[LongTermMemory] Cleaning JSON response. Original length:', response.length, 'Cleaned length:', cleaned.length);
     return cleaned;
   }
 
