@@ -51,15 +51,20 @@ resource "aws_lb_target_group" "web" {
 
 resource "aws_lb_target_group" "user_service" {
   name        = "${local.name}-user-tg"
-  port        = 3002
+  port        = 3003
   protocol    = "HTTP"
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 10
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    matcher             = "200"
+    protocol            = "HTTP"
   }
 
   tags = local.tags
@@ -67,15 +72,20 @@ resource "aws_lb_target_group" "user_service" {
 
 resource "aws_lb_target_group" "message_service" {
   name        = "${local.name}-message-tg"
-  port        = 3001
+  port        = 3002
   protocol    = "HTTP"
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 10
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    matcher             = "200"
+    protocol            = "HTTP"
   }
 
   tags = local.tags
@@ -83,15 +93,20 @@ resource "aws_lb_target_group" "message_service" {
 
 resource "aws_lb_target_group" "core_service" {
   name        = "${local.name}-core-tg"
-  port        = 3003
+  port        = 3001
   protocol    = "HTTP"
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    enabled             = true
     healthy_threshold   = 2
-    unhealthy_threshold = 10
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    matcher             = "200"
+    protocol            = "HTTP"
   }
 
   tags = local.tags
