@@ -7,13 +7,18 @@ if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {
   const dbPassword = process.env.DB_PASSWORD;
 
   if (dbHost && dbUsername && dbPassword) {
+    // URL encode the username and password to handle special characters
+    const encodedUsername = encodeURIComponent(dbUsername);
+    const encodedPassword = encodeURIComponent(dbPassword);
+    
     if (!process.env.DATABASE_URL_USER) {
-      process.env.DATABASE_URL_USER = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_user`;
+      process.env.DATABASE_URL_USER = `postgresql://${encodedUsername}:${encodedPassword}@${dbHost}:${dbPort}/collm_user`;
     }
     if (!process.env.DATABASE_URL_CORE) {
-      process.env.DATABASE_URL_CORE = `postgresql://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/collm_core`;
+      process.env.DATABASE_URL_CORE = `postgresql://${encodedUsername}:${encodedPassword}@${dbHost}:${dbPort}/collm_core`;
     }
     console.log('[Database] Constructed database URLs from component environment variables');
+    console.log(`[Database] Host: ${dbHost}, Port: ${dbPort}, Username: ${dbUsername}`);
   }
 }
 
