@@ -247,18 +247,18 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
 });
 
 // Test database connection
-const testDatabaseConnection = async () => {
-  console.log('[CoreService] Testing database connection...');
-  try {
-    await prismaCore.$connect();
-    console.log('[CoreService] Database connection successful');
-    await prismaCore.$disconnect();
-  } catch (error) {
-    console.error('[CoreService] Database connection failed:', error);
-    console.error('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set (length: ' + process.env.DATABASE_URL_CORE.length + ')' : 'Not set');
-    throw error;
-  }
-};
+// const testDatabaseConnection = async () => {
+//   console.log('[CoreService] Testing database connection...');
+//   try {
+//     await prismaCore.$connect();
+//     console.log('[CoreService] Database connection successful');
+//     await prismaCore.$disconnect();
+//   } catch (error) {
+//     console.error('[CoreService] Database connection failed:', error);
+//     console.error('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set (length: ' + process.env.DATABASE_URL_CORE.length + ')' : 'Not set');
+//     throw error;
+//   }
+// };
 
 // Start HTTP server
 const startHttpServer = async () => {
@@ -268,8 +268,19 @@ const startHttpServer = async () => {
 
   // Register routes
   fastify.get('/health', async (request, reply) => {
-    fastify.log.info('Health check endpoint hit');
-    return { status: 'ok' };
+    try {
+      // Test database connectivity
+      await prismaCore.$queryRaw`SELECT 1 as health`;
+      return { status: 'ok', service: 'core-service', database: 'connected' };
+    } catch (error) {
+      request.log.error('Health check failed:', error);
+      return reply.code(503).send({ 
+        status: 'error', 
+        service: 'core-service', 
+        database: 'disconnected',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
   // ...existing code for other routes...
 
