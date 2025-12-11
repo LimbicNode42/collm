@@ -9,243 +9,6 @@ import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
 import { parseKeyFactsFromDb } from './utils/factConversion';
 
-// HTTP Server for Node Management
-const fastify = Fastify({
-  logger: true
-});
-
-// Add CORS support
-fastify.register(require('@fastify/cors'), {
-  origin: true, // Allow all origins for now
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-});
-
-// Health check
-// fastify.get('/health', async (request, reply) => {
-//   try {
-//     // Test database connectivity
-//     await prismaCore.$queryRaw`SELECT 1 as health`;
-//     return { status: 'ok', service: 'core-service', database: 'connected' };
-//   } catch (error) {
-//     request.log.error('Health check failed:', error);
-//     return reply.code(503).send({ 
-//       status: 'error', 
-//       service: 'core-service', 
-//       database: 'disconnected',
-//       error: error instanceof Error ? error.message : 'Unknown error'
-//     });
-//   }
-// });
-
-// Node management endpoints
-fastify.post<{
-  Body: CoreService.CreateNodeRequest;
-  Reply: CoreService.NodeResponse | { error: string };
-}>('/nodes', async (request, reply) => {
-  const { topic, description, model } = request.body;
-
-  if (!topic) {
-    return reply.code(400).send({ error: 'Topic is required' });
-  }
-
-  try {
-    const node = await coreEngine.createNode(
-      topic,
-      description || 'Node created via API',
-      model || 'claude-sonnet-4-5-20250929'
-    );
-    
-    // Convert to OpenAPI contract format
-    const nodeResponse: CoreService.NodeResponse = {
-      id: node.id,
-      topic: node.topic,
-      description: node.description || '',
-      model: node.model,
-      memory: {
-        coreContext: node.memory?.coreContext || '',
-        workingMemory: node.memory?.workingMemory || '',
-        keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
-        messageCount: node.memory?.messageCount || 0,
-        lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
-      },
-      createdAt: node.createdAt.toISOString(),
-      updatedAt: node.updatedAt.toISOString(),
-    };
-    
-    return reply.code(201).send(nodeResponse);
-  } catch (error) {
-    request.log.error(error);
-    return reply.code(500).send({ error: 'Internal Server Error' });
-  }
-});
-
-fastify.get<{
-  Querystring: { limit?: number; offset?: number };
-  Reply: { nodes: CoreService.NodeResponse[]; total: number; limit: number; offset: number };
-}>('/nodes', async (request, reply) => {
-  try {
-    const { limit = 10, offset = 0 } = request.query;
-    const dbNodes = await coreEngine.listNodes();
-    
-    // Convert to OpenAPI contract format
-    const nodes: CoreService.NodeResponse[] = dbNodes.map(node => ({
-      id: node.id,
-      topic: node.topic,
-      description: node.description || '',
-      model: node.model,
-      memory: {
-        coreContext: node.memory?.coreContext || '',
-        workingMemory: node.memory?.workingMemory || '',
-        keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
-        messageCount: node.memory?.messageCount || 0,
-        lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
-      },
-      createdAt: node.createdAt.toISOString(),
-      updatedAt: node.updatedAt.toISOString(),
-    }));
-    
-    return reply.send({ 
-      nodes, 
-      total: nodes.length, 
-      limit, 
-      offset 
-    });
-  } catch (error) {
-    request.log.error(error);
-    return reply.code(500).send({ 
-      error: 'Internal Server Error',
-      code: 'INTERNAL_ERROR'
-    } as any);
-  }
-});
-
-fastify.get('/nodes/:id', async (request, reply) => {
-  const { id } = request.params as { id: string };
-  try {
-    const node = await coreEngine.getNode(id);
-    if (!node) {
-      return reply.code(404).send({ error: 'Node not found' });
-    }
-    return reply.send({ success: true, node });
-  } catch (error) {
-    request.log.error(error);
-    return reply.code(500).send({ error: 'Internal Server Error' });
-  }
-});
-
-// LLM testing endpoint
-fastify.post('/llm/test', async (request, reply) => {
-  const body = request.body as any;
-  const { prompt, systemPrompt, model } = body;
-
-  if (!prompt) {
-    return reply.code(400).send({ error: 'Prompt is required' });
-  }
-
-  try {
-    const startTime = Date.now();
-    const response = await llmService.generateCompletion(
-      prompt,
-      systemPrompt,
-      model || 'claude-sonnet-4-5-20250929'
-    );
-    const duration = Date.now() - startTime;
-
-    return reply.send({ 
-      success: true, 
-      content: response.content,
-      usage: response.usage,
-      model: model || 'claude-sonnet-4-5-20250929',
-      duration,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    request.log.error('LLM test error:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to generate LLM response',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Conversational memory testing endpoint
-fastify.post('/llm/chat', async (request, reply) => {
-  const body = request.body as any;
-  const { nodeId, message, model } = body;
-
-  if (!nodeId || !message) {
-    return reply.code(400).send({ error: 'nodeId and message are required' });
-  }
-
-  try {
-    // 1. Get the node with its memory
-    const node = await coreEngine.getNode(nodeId);
-    if (!node) {
-      return reply.code(404).send({ error: 'Node not found' });
-    }
-
-    // 2. Build context from node's memory
-    const systemPrompt = `You are an AI assistant having a focused conversation about the following topic.
-
-${node.memory?.coreContext || ''}
-
-CURRENT CONTEXT:
-${node.memory?.workingMemory || 'Starting conversation'}
-
-KEY FACTS TO REMEMBER:
-${node.memory?.keyFacts?.join('\n- ') || 'None yet'}
-
-Stay focused on the core topic while being helpful and engaging. Build upon previous context naturally.`;
-
-    // 3. Generate LLM response
-    const startTime = Date.now();
-    const llmResponse = await llmService.generateCompletion(
-      message,
-      systemPrompt,
-      model || node.model || 'claude-sonnet-4-5-20250929'
-    );
-    const duration = Date.now() - startTime;
-
-    // 4. Create a temporary message object for memory update
-    const tempMessage = {
-      id: `temp-${Date.now()}`,
-      content: message,
-      userId: 'memory-test-user',
-      nodeId: nodeId,
-      targetNodeVersion: node.version,
-      status: MessageStatus.ACCEPTED,
-      createdAt: new Date()
-    };
-
-    // 5. Update node memory with this conversation turn
-    const updatedMemory = await memoryManager.addMessage(node, tempMessage, llmResponse.content);
-
-    // 6. Save the updated memory to database
-    const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
-
-    return reply.send({
-      success: true,
-      response: llmResponse.content,
-      node: {
-        id: updatedNode.id,
-        topic: updatedNode.topic,
-        memory: updatedNode.memory,
-        messageCount: updatedMemory.messageCount
-      },
-      usage: llmResponse.usage,
-      model: model || node.model,
-      duration,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    request.log.error('LLM chat error:', error);
-    return reply.code(500).send({ 
-      error: 'Failed to process chat message',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
 // Test database connection
 // const testDatabaseConnection = async () => {
 //   console.log('[CoreService] Testing database connection...');
@@ -264,16 +27,243 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
 const startHttpServer = async () => {
   const fastify = Fastify({ logger: true });
 
-  fastify.log.info('Registering routes...');
+  // Add CORS support
+  fastify.register(require('@fastify/cors'), {
+    origin: true, // Allow all origins for now
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  });
+
+  // Health check
+  // fastify.get('/health', async (request, reply) => {
+  //   try {
+  //     // Test database connectivity
+  //     await prismaCore.$queryRaw`SELECT 1 as health`;
+  //     return { status: 'ok', service: 'core-service', database: 'connected' };
+  //   } catch (error) {
+  //     request.log.error('Health check failed:', error);
+  //     return reply.code(503).send({ 
+  //       status: 'error', 
+  //       service: 'core-service', 
+  //       database: 'disconnected',
+  //       error: error instanceof Error ? error.message : 'Unknown error'
+  //     });
+  //   }
+  // });
 
   // Register routes
-  fastify.get('/health', async function () {
+  fastify.get('/health', async () => {
     fastify.log.info('Health check endpoint hit');
     return { status: 'ok' };
   });
-  // ...existing code for other routes...
 
-  fastify.log.info('Routes registered. Checking Fastify readiness...');
+  // Node management endpoints
+  fastify.post<{
+    Body: CoreService.CreateNodeRequest;
+    Reply: CoreService.NodeResponse | { error: string };
+  }>('/nodes', async (request, reply) => {
+    const { topic, description, model } = request.body;
+
+    if (!topic) {
+      return reply.code(400).send({ error: 'Topic is required' });
+    }
+
+    try {
+      const node = await coreEngine.createNode(
+        topic,
+        description || 'Node created via API',
+        model || 'claude-sonnet-4-5-20250929'
+      );
+      
+      // Convert to OpenAPI contract format
+      const nodeResponse: CoreService.NodeResponse = {
+        id: node.id,
+        topic: node.topic,
+        description: node.description || '',
+        model: node.model,
+        memory: {
+          coreContext: node.memory?.coreContext || '',
+          workingMemory: node.memory?.workingMemory || '',
+          keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
+          messageCount: node.memory?.messageCount || 0,
+          lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+        },
+        createdAt: node.createdAt.toISOString(),
+        updatedAt: node.updatedAt.toISOString(),
+      };
+      
+      return reply.code(201).send(nodeResponse);
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  fastify.get<{
+    Querystring: { limit?: number; offset?: number };
+    Reply: { nodes: CoreService.NodeResponse[]; total: number; limit: number; offset: number };
+  }>('/nodes', async (request, reply) => {
+    try {
+      const { limit = 10, offset = 0 } = request.query;
+      const dbNodes = await coreEngine.listNodes();
+      
+      // Convert to OpenAPI contract format
+      const nodes: CoreService.NodeResponse[] = dbNodes.map(node => ({
+        id: node.id,
+        topic: node.topic,
+        description: node.description || '',
+        model: node.model,
+        memory: {
+          coreContext: node.memory?.coreContext || '',
+          workingMemory: node.memory?.workingMemory || '',
+          keyFacts: node.memory?.keyFacts?.map(fact => fact.content) || [],
+          messageCount: node.memory?.messageCount || 0,
+          lastSummaryAt: node.memory?.lastSummaryAt ? new Date(node.memory.lastSummaryAt).toISOString() : null,
+        },
+        createdAt: node.createdAt.toISOString(),
+        updatedAt: node.updatedAt.toISOString(),
+      }));
+      
+      return reply.send({ 
+        nodes, 
+        total: nodes.length, 
+        limit, 
+        offset 
+      });
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(500).send({ 
+        error: 'Internal Server Error',
+        code: 'INTERNAL_ERROR'
+      } as any);
+    }
+  });
+
+  fastify.get('/nodes/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const node = await coreEngine.getNode(id);
+      if (!node) {
+        return reply.code(404).send({ error: 'Node not found' });
+      }
+      return reply.send({ success: true, node });
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // LLM testing endpoint
+  fastify.post('/llm/test', async (request, reply) => {
+    const body = request.body as any;
+    const { prompt, systemPrompt, model } = body;
+
+    if (!prompt) {
+      return reply.code(400).send({ error: 'Prompt is required' });
+    }
+
+    try {
+      const startTime = Date.now();
+      const response = await llmService.generateCompletion(
+        prompt,
+        systemPrompt,
+        model || 'claude-sonnet-4-5-20250929'
+      );
+      const duration = Date.now() - startTime;
+
+      return reply.send({ 
+        success: true, 
+        content: response.content,
+        usage: response.usage,
+        model: model || 'claude-sonnet-4-5-20250929',
+        duration,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      request.log.error('LLM test error:', error);
+      return reply.code(500).send({ 
+        error: 'Failed to generate LLM response',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Conversational memory testing endpoint
+  fastify.post('/llm/chat', async (request, reply) => {
+    const body = request.body as any;
+    const { nodeId, message, model } = body;
+
+    if (!nodeId || !message) {
+      return reply.code(400).send({ error: 'nodeId and message are required' });
+    }
+
+    try {
+      // 1. Get the node with its memory
+      const node = await coreEngine.getNode(nodeId);
+      if (!node) {
+        return reply.code(404).send({ error: 'Node not found' });
+      }
+
+      // 2. Build context from node's memory
+      const systemPrompt = `You are an AI assistant having a focused conversation about the following topic.
+
+  ${node.memory?.coreContext || ''}
+
+  CURRENT CONTEXT:
+  ${node.memory?.workingMemory || 'Starting conversation'}
+
+  KEY FACTS TO REMEMBER:
+  ${node.memory?.keyFacts?.join('\n- ') || 'None yet'}
+
+  Stay focused on the core topic while being helpful and engaging. Build upon previous context naturally.`;
+
+      // 3. Generate LLM response
+      const startTime = Date.now();
+      const llmResponse = await llmService.generateCompletion(
+        message,
+        systemPrompt,
+        model || node.model || 'claude-sonnet-4-5-20250929'
+      );
+      const duration = Date.now() - startTime;
+
+      // 4. Create a temporary message object for memory update
+      const tempMessage = {
+        id: `temp-${Date.now()}`,
+        content: message,
+        userId: 'memory-test-user',
+        nodeId: nodeId,
+        targetNodeVersion: node.version,
+        status: MessageStatus.ACCEPTED,
+        createdAt: new Date()
+      };
+
+      // 5. Update node memory with this conversation turn
+      const updatedMemory = await memoryManager.addMessage(node, tempMessage, llmResponse.content);
+
+      // 6. Save the updated memory to database
+      const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
+
+      return reply.send({
+        success: true,
+        response: llmResponse.content,
+        node: {
+          id: updatedNode.id,
+          topic: updatedNode.topic,
+          memory: updatedNode.memory,
+          messageCount: updatedMemory.messageCount
+        },
+        usage: llmResponse.usage,
+        model: model || node.model,
+        duration,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      request.log.error('LLM chat error:', error);
+      return reply.code(500).send({ 
+        error: 'Failed to process chat message',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
 
   try {
     await fastify.ready();
