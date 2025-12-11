@@ -262,23 +262,34 @@ const testDatabaseConnection = async () => {
 
 // Start HTTP server
 const startHttpServer = async () => {
+  const fastify = Fastify({ logger: true });
+
+  fastify.log.info('Registering routes...');
+
+  // Register routes
+  fastify.get('/health', async (request, reply) => {
+    fastify.log.info('Health check endpoint hit');
+    return { status: 'ok' };
+  });
+  // ...existing code for other routes...
+
+  fastify.log.info('Routes registered. Checking Fastify readiness...');
+
   try {
-    console.log('[CoreService] Environment check:');
-    console.log('[CoreService] DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
-    console.log('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set' : 'Not set');
-    console.log('[CoreService] SQS_QUEUE_URL:', process.env.SQS_QUEUE_URL ? 'Set' : 'Not set');
-    
-    // Test database connection before starting server
-    await testDatabaseConnection();
-    
-    await fastify.listen({ port: 3001, host: '0.0.0.0' });
-    console.log('[CoreService] HTTP server started on port 3001');
-    
-    // Log all registered routes for debugging
-    console.log('[CoreService] Registered routes:');
+    await fastify.ready();
+    fastify.log.info('Fastify is ready. Registered routes:');
     fastify.printRoutes();
   } catch (err) {
-    fastify.log.error(err);
+    fastify.log.error('Error during fastify.ready:', err);
+    throw err;
+  }
+
+  // Start server
+  try {
+    await fastify.listen({ port: 3001, host: '0.0.0.0' });
+    fastify.log.info('Server started on port 3001, host 0.0.0.0');
+  } catch (err) {
+    fastify.log.error('Error starting server:', err);
     process.exit(1);
   }
 };
