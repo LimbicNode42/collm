@@ -202,40 +202,33 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
         });
     }
 });
-const startHttpServer = async () => {
-    const fastify = (0, fastify_1.default)({ logger: true });
-    fastify.log.info('Registering routes...');
-    fastify.get('/health', async (request, reply) => {
-        try {
-            await database_1.prismaCore.$queryRaw `SELECT 1 as health`;
-            return { status: 'ok', service: 'core-service', database: 'connected' };
-        }
-        catch (error) {
-            request.log.error('Health check failed:', error);
-            return reply.code(503).send({
-                status: 'error',
-                service: 'core-service',
-                database: 'disconnected',
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
-    });
-    fastify.log.info('Routes registered. Checking Fastify readiness...');
+const testDatabaseConnection = async () => {
+    console.log('[CoreService] Testing database connection...');
     try {
-        await fastify.ready();
-        fastify.log.info('Fastify is ready. Registered routes:');
+        await database_1.prismaCore.$connect();
+        console.log('[CoreService] Database connection successful');
+        await database_1.prismaCore.$disconnect();
+    }
+    catch (error) {
+        console.error('[CoreService] Database connection failed:', error);
+        console.error('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set (length: ' + process.env.DATABASE_URL_CORE.length + ')' : 'Not set');
+        throw error;
+    }
+};
+const startHttpServer = async () => {
+    try {
+        console.log('[CoreService] Environment check:');
+        console.log('[CoreService] DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
+        console.log('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set' : 'Not set');
+        console.log('[CoreService] SQS_QUEUE_URL:', process.env.SQS_QUEUE_URL ? 'Set' : 'Not set');
+        await testDatabaseConnection();
+        await fastify.listen({ port: 3001, host: '0.0.0.0' });
+        console.log('[CoreService] HTTP server started on port 3001');
+        console.log('[CoreService] Registered routes:');
         fastify.printRoutes();
     }
     catch (err) {
-        fastify.log.error('Error during fastify.ready:', err);
-        throw err;
-    }
-    try {
-        await fastify.listen({ port: 3001, host: '0.0.0.0' });
-        fastify.log.info('Server started on port 3001, host 0.0.0.0');
-    }
-    catch (err) {
-        fastify.log.error('Error starting server:', err);
+        fastify.log.error(err);
         process.exit(1);
     }
 };
