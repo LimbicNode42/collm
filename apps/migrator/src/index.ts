@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 // Construct DATABASE_URL environment variables before any imports
 // This must happen before Prisma tries to validate the schema
 if (!process.env.DATABASE_URL_USER || !process.env.DATABASE_URL_CORE) {

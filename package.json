@@ -18,5 +18,8 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
   }
 }
