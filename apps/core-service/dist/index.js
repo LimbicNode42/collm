@@ -7,14 +7,10 @@ require("dotenv/config");
 const fastify_1 = __importDefault(require("fastify"));
 const cors_1 = __importDefault(require("@fastify/cors"));
 const jwt_1 = __importDefault(require("@fastify/jwt"));
-const queue_1 = require("./services/queue");
-const adjudication_1 = require("./services/adjudication");
 const core_1 = require("./services/core");
 const llm_1 = require("./services/llm");
 const memory_1 = require("./services/memory");
-const database_1 = require("@collm/database");
 const domain_1 = require("./types/domain");
-const factConversion_1 = require("./utils/factConversion");
 const fastify = (0, fastify_1.default)({ logger: true });
 fastify.register(cors_1.default, {
     origin: true,
@@ -23,20 +19,8 @@ fastify.register(cors_1.default, {
 fastify.register(jwt_1.default, {
     secret: process.env.JWT_SECRET || 'supersecret',
 });
-fastify.get('/health', async (request, reply) => {
-    try {
-        await database_1.prismaCore.$queryRaw `SELECT 1 as health`;
-        return { status: 'ok', service: 'core-service', database: 'connected' };
-    }
-    catch (error) {
-        request.log.error('Health check failed:', error);
-        return reply.code(503).send({
-            status: 'error',
-            service: 'core-service',
-            database: 'disconnected',
-            error: error instanceof Error ? error.message : 'Unknown error'
-        });
-    }
+fastify.get('/health', async () => {
+    return { status: 'ok' };
 });
 fastify.post('/nodes', async (request, reply) => {
     var _a, _b, _c, _d, _e, _f;
@@ -206,124 +190,14 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
         });
     }
 });
-const startHttpServer = async () => {
-    try {
-        await fastify.ready();
-        fastify.log.info('Fastify is ready. Registered routes:');
-        fastify.printRoutes();
-    }
-    catch (err) {
-        fastify.log.error('Error during fastify.ready:', err);
-        throw err;
-    }
+const start = async () => {
     try {
         await fastify.listen({ port: 3003, host: '0.0.0.0' });
-        fastify.log.info('Server started on port 3003, host 0.0.0.0');
     }
     catch (err) {
-        fastify.log.error('Error starting server:', err);
+        fastify.log.error(err);
         process.exit(1);
     }
 };
-async function processMessage() {
-    const queueMessage = await queue_1.messageQueue.dequeue();
-    if (!queueMessage) {
-        return false;
-    }
-    console.log(`[Worker] Processing message ${queueMessage.messageId}`);
-    try {
-        const message = await database_1.prismaCore.message.findUnique({
-            where: { id: queueMessage.messageId },
-            include: { node: true },
-        });
-        if (!message) {
-            console.error(`[Worker] Message ${queueMessage.messageId} not found in DB`);
-            return true;
-        }
-        const node = message.node;
-        const domainMessage = {
-            id: message.id,
-            content: message.content,
-            userId: message.userId,
-            nodeId: message.nodeId,
-            targetNodeVersion: message.targetNodeVersion,
-            status: message.status,
-            createdAt: message.createdAt,
-        };
-        const domainNode = {
-            id: node.id,
-            topic: node.topic,
-            description: node.description || undefined,
-            memory: {
-                coreContext: node.coreContext,
-                workingMemory: node.workingMemory,
-                keyFacts: (0, factConversion_1.parseKeyFactsFromDb)(node.keyFacts),
-                messageCount: node.messageCount,
-                lastSummaryAt: node.lastSummaryAt,
-            },
-            version: node.version,
-            model: node.model,
-            createdAt: node.createdAt,
-            updatedAt: node.updatedAt,
-        };
-        const verdict = await adjudication_1.adjudicationEngine.adjudicate(domainMessage, domainNode);
-        console.log(`[Worker] Verdict for ${message.id}:`, verdict);
-        let newStatus = domain_1.MessageStatus.PENDING;
-        if (verdict.isStale) {
-            newStatus = domain_1.MessageStatus.STALE;
-        }
-        else if (verdict.isRelevant) {
-            newStatus = domain_1.MessageStatus.ACCEPTED;
-        }
-        else {
-            newStatus = domain_1.MessageStatus.REJECTED;
-        }
-        await database_1.prismaCore.message.update({
-            where: { id: message.id },
-            data: { status: newStatus },
-        });
-        if (newStatus === domain_1.MessageStatus.ACCEPTED) {
-            const domainMessage = {
-                id: message.id,
-                content: message.content,
-                userId: message.userId,
-                nodeId: message.nodeId,
-                targetNodeVersion: message.targetNodeVersion,
-                status: domain_1.MessageStatus.ACCEPTED,
-                createdAt: message.createdAt,
-            };
-            await core_1.coreEngine.updateNodeState(node.id, [domainMessage]);
-        }
-    }
-    catch (error) {
-        console.error(`[Worker] Error processing message ${queueMessage.messageId}:`, error);
-    }
-    return true;
-}
-async function startMessageProcessor() {
-    console.log('[CoreService] Starting message processor...');
-    let running = true;
-    process.on('SIGINT', () => {
-        console.log('[CoreService] Shutting down...');
-        running = false;
-    });
-    while (running) {
-        const processed = await processMessage();
-        if (!processed) {
-            if (process.env.SQS_QUEUE_URL) {
-            }
-            else {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-        }
-    }
-}
-async function main() {
-    console.log('[CoreService] Starting core service...');
-    await startHttpServer();
-    await startMessageProcessor();
-}
-if (require.main === module) {
-    main().catch(console.error);
-}
+start();
 //# sourceMappingURL=index.js.map
