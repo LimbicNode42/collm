@@ -10,10 +10,34 @@ console.log(`Using Database URL: ${dbUrl}`);
 // Define the services to run
 const services = [
   {
+    name: 'message-service',
+    command: 'npm',
+    args: ['run', 'dev'],
+    cwd: path.join(__dirname, '../apps/message-service'),
+    env: { 
+      ...process.env, 
+      DATABASE_URL: dbUrl,
+      DATABASE_URL_USER: dbUrl,
+      JWT_SECRET: 'dev-secret-123'
+    }
+  },
+  {
     name: 'user-service',
     command: 'npm',
     args: ['run', 'dev'],
     cwd: path.join(__dirname, '../apps/user-service'),
+    env: { 
+      ...process.env, 
+      DATABASE_URL: dbUrl,
+      DATABASE_URL_USER: dbUrl,
+      JWT_SECRET: 'dev-secret-123'
+    }
+  },
+  {
+    name: 'core-service',
+    command: 'npm',
+    args: ['run', 'dev'],
+    cwd: path.join(__dirname, '../apps/core-service'),
     env: { 
       ...process.env, 
       DATABASE_URL: dbUrl,

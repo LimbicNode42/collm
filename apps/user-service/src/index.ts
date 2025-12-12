@@ -12,6 +12,7 @@ const fastify = Fastify({
 // Register CORS
 fastify.register(cors, {
   origin: true, // Allow all origins for dev
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
 });
 
 // Register JWT

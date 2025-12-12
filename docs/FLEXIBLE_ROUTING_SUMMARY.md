@@ -59,7 +59,7 @@ resource "aws_lb_listener_rule" "web_api_catchall" {
 const SERVICES: ServiceConfig[] = [
   {
     name: 'core-service',
-    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3001',
+    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3003',
     pathPatterns: ['/nodes', '/llm', '/health', '/adjudication']
   }
 ];
@@ -78,8 +78,8 @@ const SERVICES: ServiceConfig[] = [
 # Development
 web:
   environment:
-    - CORE_SERVICE_URL=http://core-service:3001
-    - MESSAGE_SERVICE_URL=http://message-service:3002
+    - CORE_SERVICE_URL=http://core-service:3003
+    - MESSAGE_SERVICE_URL=http://message-service:3001
 ```
 
 ```terraform

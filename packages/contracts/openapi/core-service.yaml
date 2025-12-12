@@ -5,9 +5,9 @@ info:
   description: Handles node management, memory system, and LLM interactions
 
 servers:
-  - url: http://localhost:3001
+  - url: http://localhost:3003
     description: Development server
-  - url: http://core-service:3001
+  - url: http://core-service:3003
     description: Docker container
 
 paths:

@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
 import { messageQueue } from './services/queue';
 import { adjudicationEngine } from './services/adjudication';
 import { coreEngine } from './services/core';
@@ -10,43 +12,22 @@ import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
 import { parseKeyFactsFromDb } from './utils/factConversion';
 
-// Test database connection
-// const testDatabaseConnection = async () => {
-//   console.log('[CoreService] Testing database connection...');
-//   try {
-//     await prismaCore.$connect();
-//     console.log('[CoreService] Database connection successful');
-//     await prismaCore.$disconnect();
-//   } catch (error) {
-//     console.error('[CoreService] Database connection failed:', error);
-//     console.error('[CoreService] DATABASE_URL_CORE:', process.env.DATABASE_URL_CORE ? 'Set (length: ' + process.env.DATABASE_URL_CORE.length + ')' : 'Not set');
-//     throw error;
-//   }
-// };
-
 const fastify = Fastify({ logger: true });
 
-// Add CORS support
-fastify.register(require('@fastify/cors'), {
-  origin: true, // Allow all origins for now
+// Register CORS
+fastify.register(cors, {
+  origin: true, // Allow all origins for dev
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 });
 
+// Register JWT
+fastify.register(jwt, {
+  secret: process.env.JWT_SECRET || 'supersecret',
+});
+
 // Health check
-fastify.get('/health', async (request, reply) => {
-  try {
-    // Test database connectivity
-    await prismaCore.$queryRaw`SELECT 1 as health`;
-    return { status: 'ok', service: 'core-service', database: 'connected' };
-  } catch (error) {
-    request.log.error('Health check failed:', error);
-    return reply.code(503).send({ 
-      status: 'error', 
-      service: 'core-service', 
-      database: 'disconnected',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+fastify.get('/health', async () => {
+  return { status: 'ok' };
 });
 
 // Node management endpoints
@@ -381,7 +362,7 @@ async function processMessage() {
 }
 
 async function startMessageProcessor() {
-  console.log('[CoreService] Starting message processor...');
+  console.log('[CoreService] Starting core processor...');
   
   let running = true;
   

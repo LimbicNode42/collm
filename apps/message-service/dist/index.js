@@ -3,11 +3,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const fastify_1 = __importDefault(require("fastify"));
+const cors_1 = __importDefault(require("@fastify/cors"));
+const jwt_1 = __importDefault(require("@fastify/jwt"));
 const database_1 = require("@collm/database");
 const queue_1 = require("./services/queue");
 const fastify = (0, fastify_1.default)({
     logger: true
+});
+fastify.register(cors_1.default, {
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+});
+fastify.register(jwt_1.default, {
+    secret: process.env.JWT_SECRET || 'supersecret',
 });
 fastify.get('/health', async () => {
     return { status: 'ok' };
@@ -80,7 +90,7 @@ fastify.post('/message', async (request, reply) => {
 });
 const start = async () => {
     try {
-        await fastify.listen({ port: 3002, host: '0.0.0.0' });
+        await fastify.listen({ port: 3001, host: '0.0.0.0' });
     }
     catch (err) {
         fastify.log.error(err);

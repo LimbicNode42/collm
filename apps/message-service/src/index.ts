@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
 import { prismaCore } from '@collm/database';
 import { messageQueue } from './services/queue';
 import { QueueMessage } from './types/domain';
@@ -7,6 +9,17 @@ import { MessageService } from '@collm/contracts';
 
 const fastify = Fastify({
   logger: true
+});
+
+// Register CORS
+fastify.register(cors, {
+  origin: true, // Allow all origins for dev
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+});
+
+// Register JWT
+fastify.register(jwt, {
+  secret: process.env.JWT_SECRET || 'supersecret',
 });
 
 fastify.get('/health', async () => {

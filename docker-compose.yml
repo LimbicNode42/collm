@@ -24,7 +24,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     ports:
-      - "3001:3001"
+      - "3003:3003"
     depends_on:
       - db
     networks:
@@ -65,9 +65,9 @@ services:
     environment:
       - NODE_ENV=development
       # Service URLs for proxy routing
-      - CORE_SERVICE_URL=http://core-service:3001
-      - MESSAGE_SERVICE_URL=http://message-service:3002
-      - USER_SERVICE_URL=http://user-service:3003
+      - CORE_SERVICE_URL=http://core-service:3003
+      - MESSAGE_SERVICE_URL=http://message-service:3001
+      - USER_SERVICE_URL=http://user-service:3002
     ports:
       - "3000:3000"
     depends_on:

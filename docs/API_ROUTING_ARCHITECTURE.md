@@ -52,7 +52,7 @@ The web app acts as an intelligent API gateway:
 const SERVICES: ServiceConfig[] = [
   {
     name: 'core-service',
-    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3001',
+    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3003',
     pathPatterns: ['/nodes', '/llm', '/health', '/adjudication']
   },
   // ... other services
@@ -153,9 +153,9 @@ resource "aws_lb_listener_rule" "analytics_service_api" {
 ```yaml
 web:
   environment:
-    - CORE_SERVICE_URL=http://core-service:3001
-    - MESSAGE_SERVICE_URL=http://message-service:3002
-    - USER_SERVICE_URL=http://user-service:3003
+    - CORE_SERVICE_URL=http://core-service:3003
+    - MESSAGE_SERVICE_URL=http://message-service:3001
+    - USER_SERVICE_URL=http://user-service:3002
 ```
 
 ### Production (ECS)

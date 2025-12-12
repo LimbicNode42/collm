@@ -15,17 +15,17 @@ interface ServiceConfig {
 const SERVICES: ServiceConfig[] = [
   {
     name: 'core-service',
-    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3001',
+    baseUrl: process.env.CORE_SERVICE_URL || 'http://core-service:3003',
     pathPatterns: ['/nodes', '/llm', '/health', '/adjudication']
   },
   {
     name: 'message-service', 
-    baseUrl: process.env.MESSAGE_SERVICE_URL || 'http://message-service:3002',
+    baseUrl: process.env.MESSAGE_SERVICE_URL || 'http://message-service:3001',
     pathPatterns: ['/message', '/messages', '/queue']
   },
   {
     name: 'user-service',
-    baseUrl: process.env.USER_SERVICE_URL || 'http://user-service:3003', 
+    baseUrl: process.env.USER_SERVICE_URL || 'http://user-service:3002', 
     pathPatterns: ['/users', '/auth', '/register', '/login']
   }
 ];
