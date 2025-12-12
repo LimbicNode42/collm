@@ -5,9 +5,9 @@ info:
   description: Handles user authentication and management
 
 servers:
-  - url: http://localhost:3003
+  - url: http://localhost:3002
     description: Development server
-  - url: http://user-service:3003
+  - url: http://user-service:3002
     description: Docker container
 
 paths:

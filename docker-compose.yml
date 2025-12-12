@@ -38,7 +38,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@db:5432/core_db
       - NODE_ENV=development
     ports:
-      - "3002:3002"
+      - "3001:3001"
     depends_on:
       - db
     networks:
@@ -52,7 +52,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@db:5432/user_db
       - NODE_ENV=development
     ports:
-      - "3003:3003"
+      - "3002:3002"
     depends_on:
       - db
     networks:

@@ -239,18 +239,10 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
   }
 });
 
+
 // Start HTTP server
 const startHttpServer = async () => {
-  try {
-    await fastify.ready();
-    fastify.log.info('Fastify is ready. Registered routes:');
-    fastify.printRoutes();
-  } catch (err) {
-    fastify.log.error('Error during fastify.ready:', err);
-    throw err;
-  }
-
-  // Start server
+    // Start server
   try {
     await fastify.listen({ port: 3003, host: '0.0.0.0' });
     fastify.log.info('Server started on port 3003, host 0.0.0.0');
