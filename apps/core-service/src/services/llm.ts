@@ -173,6 +173,10 @@ export class RealLLMService implements ILLMService {
     console.log(`[LLMService] Generating completion with model: ${model}`);
     
     const provider = this.getProviderFromModel(model);
+
+    console.debug(`[LLMService] Using provider: ${provider} for model: ${model}`);
+    console.debug(`[LLMService] System Prompt: "${systemPrompt.substring(0, 50)}..."`);
+    console.debug(`[LLMService] Prompt: "${prompt.substring(0, 50)}..."`);
     
     try {
       switch (provider) {

@@ -121,6 +121,8 @@ Return only a number between 0.0 and 1.0, where:
 
 Similarity score:`;
 
+      console.debug('[LongTermMemory] Calculating similarity with prompt:', prompt.substring(0, 100) + '...');
+
       const response = await llmService.generateCompletion(prompt, 'You are a semantic similarity analyzer. Return only a decimal number.');
       const score = parseFloat(response.content.trim());
       return isNaN(score) ? 0 : Math.max(0, Math.min(1, score));
