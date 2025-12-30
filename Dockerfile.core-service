@@ -29,6 +29,17 @@ COPY --from=builder /app/apps/core-service/dist ./apps/core-service/dist
 COPY --from=builder /app/apps/core-service/package.json ./apps/core-service/package.json
 
 WORKDIR /app/apps/core-service
+
+# Pre-download and cache the transformer model to avoid runtime download
+# This significantly improves cold start performance
+ENV TRANSFORMERS_CACHE=/app/.cache/transformers
+RUN mkdir -p /app/.cache/transformers && \
+    node -e "const { pipeline } = require('@xenova/transformers'); \
+    (async () => { \
+      console.log('Pre-caching embedding model...'); \
+      const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true }); \
+      console.log('Model cached successfully'); \
+    })();" || echo "Model caching failed, will download at runtime"
+
 # Core service is a worker, no port exposed usually, but maybe for health checks?
-# CMD ["node", "dist/index.js"]
 CMD ["node", "dist/index.js"]

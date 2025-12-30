@@ -1,5 +1,6 @@
 import { KeyFact, FactSource } from '../types/domain';
 import { llmService } from './llm';
+import { embeddingService } from './embedding';
 
 export interface ILongTermMemory {
   /**
@@ -42,8 +43,9 @@ export interface ConfidenceEvent {
 }
 
 export class SemanticLongTermMemory implements ILongTermMemory {
-  private readonly SIMILARITY_THRESHOLD = 0.8; // Facts above this similarity are considered duplicates
+  private readonly SIMILARITY_THRESHOLD = 0.75; // Facts above this similarity are considered duplicates (lowered for better merging)
   private readonly MIN_CONFIDENCE_THRESHOLD = 0.2;
+  private readonly MAX_FACTS = 50; // Limit maximum number of facts per node
   private readonly CONFIDENCE_WEIGHTS = {
     [FactSource.USER_STATED]: 0.9,
     [FactSource.USER_CONFIRMED]: 1.0,
@@ -71,63 +73,79 @@ export class SemanticLongTermMemory implements ILongTermMemory {
     workingMemory: string, 
     coreContext: string
   ): Promise<KeyFact[]> {
+    const startTime = Date.now();
     
     // Step 1: Extract candidate facts from working memory using LLM
     const candidateFacts = await this.extractCandidateFacts(workingMemory, coreContext);
+    console.log(`[LongTermMemory] Extracted ${candidateFacts.length} candidate facts`);
     
-    // Step 2: Check each candidate against existing facts for semantic similarity
-    const mergedFacts = [...existingFacts];
+    // Step 2: Generate embeddings for all candidate facts upfront (batch processing)
+    const candidateEmbeddings = await Promise.all(
+      candidateFacts.map(fact => embeddingService.embed(fact.content))
+    );
     
-    for (const candidate of candidateFacts) {
-      const similarFact = await this.findSimilarFact(candidate, existingFacts);
+    // Step 3: Ensure existing facts have embeddings (generate if missing)
+    const existingFactsWithEmbeddings = await Promise.all(
+      existingFacts.map(async (fact) => {
+        if (!fact.embedding || fact.embedding.length === 0) {
+          const embedding = await embeddingService.embed(fact.content);
+          return { ...fact, embedding };
+        }
+        return fact;
+      })
+    );
+    
+    // Step 4: Check each candidate against existing facts using cached embeddings
+    const mergedFacts = [...existingFactsWithEmbeddings];
+    
+    for (let i = 0; i < candidateFacts.length; i++) {
+      const candidate = candidateFacts[i];
+      const candidateEmbedding = candidateEmbeddings[i];
+      
+      const similarFact = this.findSimilarFactWithEmbedding(
+        candidateEmbedding, 
+        existingFactsWithEmbeddings
+      );
       
       if (similarFact) {
         // Merge with existing fact - increase confidence and add evidence
         const updatedFact = this.mergeFacts(similarFact, candidate);
         const index = mergedFacts.findIndex(f => f.id === similarFact.id);
         mergedFacts[index] = updatedFact;
+        console.log(`[LongTermMemory] Merged fact: "${candidate.content.substring(0, 50)}..."`);
       } else {
-        // Add as new fact
+        // Add as new fact with embedding
         mergedFacts.push({
           ...candidate,
           id: `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          extractedAt: Date.now()
+          extractedAt: Date.now(),
+          embedding: candidateEmbedding
         });
+        console.log(`[LongTermMemory] Added new fact: "${candidate.content.substring(0, 50)}..."`);
       }
     }
 
-    // Step 3: Apply temporal decay and prune low-confidence facts
-    return this.pruneFactsByConfidence(
+    // Step 5: Apply temporal decay and prune low-confidence facts
+    const prunedFacts = this.pruneFactsByConfidence(
       mergedFacts.map(fact => this.updateFactConfidence(fact, { 
         type: ConfidenceEventType.TIME_DECAY, 
         timestamp: Date.now() 
       }))
     );
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`[LongTermMemory] Compression complete in ${elapsed}ms. Facts: ${existingFacts.length} → ${prunedFacts.length}`);
+    
+    return prunedFacts;
   }
 
   async calculateSimilarity(text1: string, text2: string): Promise<number> {
-    // For now, use a simple approach. Later we can implement proper embeddings
-    // This is a placeholder - in production you'd use actual embeddings
+    // Use local embeddings for fast, free semantic similarity
     try {
-      const prompt = `Rate the semantic similarity between these two statements on a scale of 0.0 to 1.0:
-
-Statement 1: "${text1}"
-Statement 2: "${text2}"
-
-Return only a number between 0.0 and 1.0, where:
-- 0.0 = completely unrelated
-- 0.5 = somewhat related
-- 1.0 = essentially the same meaning
-
-Similarity score:`;
-
-      console.debug('[LongTermMemory] Calculating similarity with prompt:', prompt.substring(0, 100) + '...');
-
-      const response = await llmService.generateCompletion(prompt, 'You are a semantic similarity analyzer. Return only a decimal number.');
-      const score = parseFloat(response.content.trim());
-      return isNaN(score) ? 0 : Math.max(0, Math.min(1, score));
+      const similarity = await embeddingService.calculateSimilarity(text1, text2);
+      return similarity;
     } catch (error) {
-      console.error('Error calculating similarity:', error);
+      console.error('[LongTermMemory] Error calculating similarity:', error);
       return 0;
     }
   }
@@ -165,9 +183,24 @@ Similarity score:`;
   }
 
   pruneFactsByConfidence(facts: KeyFact[], minConfidence = this.MIN_CONFIDENCE_THRESHOLD): KeyFact[] {
-    return facts
+    const filtered = facts
       .filter(fact => fact.confidence >= minConfidence)
-      .sort((a, b) => b.confidence - a.confidence); // Sort by confidence descending
+      .sort((a, b) => b.confidence - a.confidence); // Sort by confidence descending (highest first)
+    
+    // Limit to MAX_FACTS to prevent unbounded growth
+    // IMPORTANT: We sort by confidence BEFORE slicing, so we keep the highest-quality facts
+    if (filtered.length > this.MAX_FACTS) {
+      const pruned = filtered.slice(this.MAX_FACTS); // Facts being removed
+      const kept = filtered.slice(0, this.MAX_FACTS); // Facts being kept
+      
+      console.log(`[LongTermMemory] Pruning facts from ${filtered.length} to ${this.MAX_FACTS}`);
+      console.log(`[LongTermMemory] Keeping top ${this.MAX_FACTS} facts (confidence range: ${kept[kept.length-1].confidence.toFixed(2)} to ${kept[0].confidence.toFixed(2)})`);
+      console.log(`[LongTermMemory] Removing ${pruned.length} low-confidence facts (confidence range: ${pruned[pruned.length-1].confidence.toFixed(2)} to ${pruned[0].confidence.toFixed(2)})`);
+      
+      return kept;
+    }
+    
+    return filtered;
   }
 
   private async extractCandidateFacts(workingMemory: string, coreContext: string): Promise<Omit<KeyFact, 'id' | 'extractedAt'>[]> {
@@ -184,6 +217,7 @@ Extract facts that are:
 2. Relevant to the core topic
 3. Worth remembering for future conversations
 4. Specific and actionable
+5. **IMPORTANT: Extract ONLY the 3-5 most important facts. Quality over quantity!**
 
 Return a JSON array of objects with this structure:
 {
@@ -216,6 +250,27 @@ JSON array:`;
     }
   }
 
+  /**
+   * Find similar fact using pre-computed embeddings (much faster than LLM calls)
+   */
+  private findSimilarFactWithEmbedding(candidateEmbedding: number[], existingFacts: KeyFact[]): KeyFact | null {
+    for (const existing of existingFacts) {
+      if (!existing.embedding || existing.embedding.length === 0) {
+        continue; // Skip facts without embeddings
+      }
+      
+      const similarity = embeddingService.cosineSimilarity(candidateEmbedding, existing.embedding);
+      if (similarity >= this.SIMILARITY_THRESHOLD) {
+        console.log(`[LongTermMemory] Found similar fact (similarity: ${similarity.toFixed(3)})`);
+        return existing;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Legacy method - kept for backwards compatibility but now uses embedding service
+   */
   private async findSimilarFact(candidate: Omit<KeyFact, 'id' | 'extractedAt'>, existingFacts: KeyFact[]): Promise<KeyFact | null> {
     for (const existing of existingFacts) {
       const similarity = await this.calculateSimilarity(candidate.content, existing.content);
