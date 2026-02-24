@@ -1,0 +1,88 @@
+name: Message Service Tests
+
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/message-service/**'
+      - '.github/workflows/test-message-service.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/message-service/**'
+
+jobs:
+
+  # ── Job 1: Unit tests ──────────────────────────────────────────────────────
+  # Always runs. No AWS or DB credentials needed. Fast (~1s).
+  # Blocks merge if any unit test fails or coverage drops below thresholds.
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/message-service
+
+      - name: Run unit tests
+        run: npm run test:run
+        working-directory: ./apps/message-service
+
+      - name: Generate coverage report (enforces thresholds)
+        run: npm run test:coverage
+        working-directory: ./apps/message-service
+        # Thresholds: 80% lines/functions/statements, 70% branches
+        # Configured in vitest.config.ts — failures ARE blocking
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: apps/message-service/coverage/
+          retention-days: 14
+
+  # ── Job 2: Benchmarks ──────────────────────────────────────────────────────
+  # Always runs after unit tests pass.
+  # Records queue throughput as a CI artifact — informational only, not blocking.
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/message-service
+
+      - name: Run benchmarks
+        run: npm run bench:run
+        working-directory: ./apps/message-service
+
+      - name: Save benchmark results
+        run: npm run bench:report
+        working-directory: ./apps/message-service
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: apps/message-service/tests/benchmark/results.json
+          retention-days: 90   # 3 months for trend analysis
