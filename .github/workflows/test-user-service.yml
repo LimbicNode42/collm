@@ -1,0 +1,87 @@
+name: User Service Tests
+
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/user-service/**'
+      - '.github/workflows/test-user-service.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/user-service/**'
+
+jobs:
+
+  # ── Job 1: Unit tests ──────────────────────────────────────────────────────
+  # No DB, no AWS, no bcrypt rounds — prismaUser and bcryptjs are both mocked.
+  # Fast (~1s). Blocks merge on failure or coverage drop.
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/user-service
+
+      - name: Run unit tests
+        run: npm run test:run
+        working-directory: ./apps/user-service
+
+      - name: Generate coverage report (enforces thresholds)
+        run: npm run test:coverage
+        working-directory: ./apps/user-service
+        # Thresholds: 80% lines/functions/statements, 70% branches (vitest.config.ts)
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: apps/user-service/coverage/
+          retention-days: 14
+
+  # ── Job 2: Auth benchmarks ────────────────────────────────────────────────
+  # Documents bcrypt cost per request (hash + compare).
+  # Informational only — not blocking. Saved for 90 days for trend analysis.
+  benchmarks:
+    name: Auth Benchmarks
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/user-service
+
+      - name: Run benchmarks
+        run: npm run bench:run
+        working-directory: ./apps/user-service
+
+      - name: Save benchmark results
+        run: npm run bench:report
+        working-directory: ./apps/user-service
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth-benchmark-results-${{ github.sha }}
+          path: apps/user-service/tests/benchmark/results.json
+          retention-days: 90
