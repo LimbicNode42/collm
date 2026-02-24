@@ -17,6 +17,7 @@ on:
     paths:
       - 'apps/migrator/**'
       - 'packages/database/prisma/**'
+  workflow_dispatch:   # Allow manual trigger from the Actions tab
 
 jobs:
   smoke-test:
