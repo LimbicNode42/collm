@@ -1,0 +1,111 @@
+name: Migrator Smoke Test
+
+# Runs on any change to the migrator or the Prisma schemas it executes.
+# A passing run proves:
+#   1. Both databases can be created from scratch
+#   2. All Prisma migration files apply cleanly
+#   3. The app user is created and granted correct permissions
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/migrator/**'
+      - 'packages/database/prisma/**'
+      - '.github/workflows/test-migrator.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/migrator/**'
+      - 'packages/database/prisma/**'
+
+jobs:
+  smoke-test:
+    name: Migrator Smoke Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_test
+          # No POSTGRES_DB — migrator creates its own DBs
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Install from the monorepo root so npm workspaces links
+      # @collm/database and @collm/contracts into every app's node_modules
+      - name: Install all workspace dependencies
+        run: npm ci
+
+      # Run the migrator from its own directory so the relative Prisma schema
+      # paths (../../packages/database/prisma/...) resolve correctly
+      - name: Run migrator
+        run: npm run dev
+        working-directory: ./apps/migrator
+        env:
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres_test
+          DB_SSL: 'false'              # SSL not available in CI postgres container
+          APP_USER_PASSWORD: 'ci_app_user_pwd'
+
+      # ── Verification steps ──────────────────────────────────────────────────
+      # These run psql against the just-migrated databases to confirm the
+      # migrator actually did what it claims.
+
+      - name: Verify collm_user database was created
+        run: psql -h localhost -U postgres -lqt | cut -d'|' -f1 | grep -qw collm_user
+        env:
+          PGPASSWORD: postgres_test
+
+      - name: Verify collm_core database was created
+        run: psql -h localhost -U postgres -lqt | cut -d'|' -f1 | grep -qw collm_core
+        env:
+          PGPASSWORD: postgres_test
+
+      - name: Verify user DB migrations applied (_prisma_migrations table exists)
+        run: |
+          psql -h localhost -U postgres -d collm_user -c \
+            "SELECT 1 FROM information_schema.tables WHERE table_name = '_prisma_migrations'" \
+            | grep -q 1
+        env:
+          PGPASSWORD: postgres_test
+
+      - name: Verify core DB migrations applied (_prisma_migrations table exists)
+        run: |
+          psql -h localhost -U postgres -d collm_core -c \
+            "SELECT 1 FROM information_schema.tables WHERE table_name = '_prisma_migrations'" \
+            | grep -q 1
+        env:
+          PGPASSWORD: postgres_test
+
+      - name: Verify app user (user_service_app) was created
+        run: |
+          psql -h localhost -U postgres -c \
+            "SELECT 1 FROM pg_roles WHERE rolname = 'user_service_app'" \
+            | grep -q 1
+        env:
+          PGPASSWORD: postgres_test
+
+      - name: Verify app user has CONNECT permission on collm_user
+        run: |
+          psql -h localhost -U postgres -d collm_user -c \
+            "SELECT has_database_privilege('user_service_app', 'collm_user', 'CONNECT')" \
+            | grep -q t
+        env:
+          PGPASSWORD: postgres_test

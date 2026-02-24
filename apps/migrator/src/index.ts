@@ -35,13 +35,16 @@ async function createDatabaseIfNotExists(connectionString: string) {
   // Connect to 'postgres' database to create new DBs
   // We extract credentials and host from the original URL
   
+  // SSL is opt-in via DB_SSL=true — needed in production (RDS) but not locally or in CI
+  const ssl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+
   const client = new Client({ 
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     host: url.hostname,
     port: parseInt(url.port) || 5432,
     database: 'postgres',
-    ssl: { rejectUnauthorized: false }
+    ssl,
   });
   
   try {
@@ -137,10 +140,8 @@ async function createUserAndGrantPermissions(connectionString: string, username:
   const url = new URL(connectionString);
   const dbName = url.pathname.substring(1);
 
-  const client = new Client({
-    connectionString,
-    ssl: { rejectUnauthorized: false }
-  });
+  const ssl = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+  const client = new Client({ connectionString, ssl });
 
   try {
     await client.connect();
