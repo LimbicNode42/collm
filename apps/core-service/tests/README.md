@@ -4,123 +4,192 @@ Comprehensive test suite for the memory system, focusing on embedding-based fact
 
 ## Test Stack
 
-- **Vitest** - Fast unit testing framework with built-in benchmarking
-- **@xenova/transformers** - Local embeddings for semantic similarity
-- **100% Open Source** - No cloud dependencies, runs locally and in CI/CD
+- **Vitest** — Fast unit testing framework with built-in benchmarking
+- **@xenova/transformers** — Local embeddings (MiniLM-L6-v2, runs offline)
+- **vi.spyOn** — Mock isolation without module hoisting side-effects
+- **100% Open Source** — No cloud dependencies for unit tests
 
 ## Test Structure
 
 ```
 tests/
-├── unit/                      # Unit tests
-│   ├── embedding.test.ts      # Embedding service tests
-│   ├── longTermMemory.test.ts # Long-term memory & fact management
-│   └── memory.test.ts         # (TODO) Memory manager tests
-├── benchmark/                 # Performance benchmarks
-│   └── compression.bench.ts   # Memory compression performance
-├── fixtures/                  # Test data
-│   └── test-data.ts          # Mock facts and scenarios
-└── README.md                 # This file
+├── unit/                                          # Always run, no API keys needed
+│   ├── embedding.test.ts                          # Embedding service (19 tests)
+│   ├── longTermMemory.test.ts                     # Fact management & merge pipeline (22 tests)
+│   └── memory.test.ts                             # HierarchicalMemoryManager orchestration (25 tests)
+├── evaluation/                                    # Always run, no API keys needed
+│   ├── memoryEvaluator.ts                         # MemoryEvaluator class (retention/relevance/consistency/compression)
+│   └── memory-quality.eval.ts                     # Evaluator unit tests (13 tests)
+├── integration/                                   # Requires a live LLM API key (skipped silently without one)
+│   ├── longTermMemory.integration.test.ts         # End-to-end fact extraction (6 tests)
+│   └── memory-quality.integration.test.ts         # Quality gate tests using MemoryEvaluator (3 tests)
+├── benchmark/                                     # Performance timing data
+│   └── compression.bench.ts                       # All layers benchmarked (20 benches)
+├── fixtures/
+│   └── test-data.ts                              # mockFacts, conversationScenarios, similarTextPairs
+└── tsconfig.json                                  # Tests-specific TS config (noEmit, rootDir fix)
 ```
 
 ## Running Tests
 
-### Locally
-
 ```bash
-# Navigate to core-service
 cd apps/core-service
 
-# Run all tests (watch mode)
+# Unit tests (watch mode)
 npm test
 
-# Run tests once (CI mode)
+# Unit tests once — what CI runs
 npm run test:run
 
-# Run with UI
+# Integration tests — requires at least one LLM API key env var
+ANTHROPIC_API_KEY=sk-... npm run test:integration
+
+# UI explorer
 npm run test:ui
 
-# Run specific test file
-npm test embedding
-
-# Run with coverage
+# Coverage report
 npm run test:coverage
-```
 
-### Benchmarks
-
-```bash
-# Run performance benchmarks (watch mode)
-npm run bench
-
-# Run benchmarks once (CI mode)
+# Benchmarks once
 npm run bench:run
+
+# Benchmarks + save JSON results
+npm run bench:report
 ```
-
-### In CI/CD
-
-Tests automatically run on:
-- Push to `master`, `main`, or `develop` branches
-- Pull requests to these branches
-- Only when `apps/core-service/**` files change
-
-See `.github/workflows/test-core-service.yml`
 
 ## Test Coverage
 
-### Embedding Service (`embedding.test.ts`)
+### Unit + Evaluation Tests — 79 tests, ~1.2 seconds, no network
 
-- ✅ Initialization and model loading
-- ✅ Embedding generation (384-dimensional vectors)
-- ✅ Consistency (same text → same embedding)
-- ✅ Cosine similarity calculation
-- ✅ Semantic similarity detection
-- ✅ Batch embedding processing
-- ✅ Edge cases (empty strings, long texts)
+#### Embedding Service (`embedding.test.ts`) — 19 tests
+| Area | What's tested |
+|------|--------------|
+| Initialization | Model loads without error |
+| Dimensions | All embeddings are 384-dimensional (MiniLM-L6-v2) |
+| Determinism | Same text → identical embedding every run |
+| Cosine similarity | Identical vectors → 1.0; mismatched dimensions → throws |
+| Semantic accuracy | 4 parameterised text-pair cases from `similarTextPairs` fixture |
+| Batch processing | Empty array, 3-item array, 25-item array |
+| Edge cases | Empty string, 1000-word text |
 
-### Long-Term Memory (`longTermMemory.test.ts`)
+#### Long-Term Memory (`longTermMemory.test.ts`) — 22 tests
+| Area | What's tested |
+|------|--------------|
+| Similarity | Similar phrasing scores >0.7; unrelated scores <0.5 |
+| Confidence: USER_CONFIRMED | +0.3, capped at 1.0 |
+| Confidence: MENTIONED_AGAIN | +0.1 |
+| Confidence: CONTRADICTED | -0.4, floor at 0.1 |
+| Confidence: TIME_DECAY | 0.95^weeks formula; uses `lastConfirmedAt` when present |
+| Confidence: NEW FACT | Zero elapsed time → no decay |
+| lastConfirmedAt field | Only set by USER_CONFIRMED, not by other events |
+| Pruning | Threshold filtering, descending sort, MAX_FACTS (50) cap |
+| Pruning edge cases | All below threshold → empty array; empty input → empty array |
+| Merge pipeline (mocked) | Valid KeyFact shape, near-duplicate merged not duplicated |
+| LLM resilience (mocked) | Malformed JSON → graceful fallback, existing facts preserved |
+| Embedding caching | Cached cosine similarity < 10ms |
 
-- ✅ Semantic similarity using embeddings
-- ✅ Confidence score updates (user confirmation, time decay, etc.)
-- ✅ Fact pruning and sorting
-- ✅ MAX_FACTS limit enforcement (50 facts)
-- ✅ Embedding caching for performance
-- ⚠️  Fact extraction (requires LLM API - skipped in CI)
+#### Memory Manager (`memory.test.ts`) — 25 tests
+| Area | What's tested |
+|------|--------------|
+| initializeMemory | Core context, zero counters, fact from description, empty/whitespace |
+| shouldCompress | 0 msgs (no), 2 msgs (no), 3 msgs (yes), 17k chars (yes), post-summary (no) |
+| addMessage | Count increment, User/Assistant format, no assistant without response, accumulation below threshold, compression triggered via spy |
+| getContext | Core context present, working memory present, high-confidence facts shown, <0.3 facts hidden, sorted by confidence, capped at 10, recent messages appended, capped at 5 |
 
-### Performance Benchmarks (`compression.bench.ts`)
+#### MemoryEvaluator (`evaluation/memory-quality.eval.ts`) — 13 tests
+| Area | What's tested |
+|------|--------------|
+| Retention: match | Two semantically similar facts → score > 0.7 |
+| Retention: no facts | 0 extracted, expected facts present → 0.0 |
+| Retention: no expected | Empty expected list → 1.0 |
+| Relevance: on vs off topic | ML fact scores higher than beach fact against ML context |
+| Relevance: no facts | 0 extracted → 0.0 |
+| Consistency: single fact | 1 fact, no pairs → 1.0 |
+| Consistency: all distinct | 3 different-topic facts → 1.0 |
+| Consistency: near-duplicate | Two identical facts → < 1.0 |
+| Compression ratio: compressed | ~350 char input, 16 char output → ratio > 5 |
+| Compression ratio: no facts | No facts → 1.0 (no change) |
+| checkThresholds: all pass | All scores above threshold → no failures |
+| checkThresholds: all fail | All scores below threshold → 4 failure messages |
+| checkThresholds: custom override | Custom thresholds respected per-metric |
 
-- ⏱️  Embedding generation speed
-- ⏱️  Similarity calculation (cached vs fresh)
-- ⏱️  Fact comparison at scale (5 new vs 20/50 existing)
-- ⏱️  Confidence updates
-- ⏱️  Fact pruning performance
-- ⏱️  Full compression workflow (without LLM)
+---
 
-## Expected Performance
+### Integration Tests — requires live LLM (`tests/integration/`)
 
-Based on benchmarks, you should see:
+Run automatically in CI when an API key secret is present. Skipped silently otherwise.
 
-| Operation | Expected Time |
-|-----------|--------------|
-| Generate single embedding | ~10-30ms |
-| Generate 5 embeddings (batch) | ~50-150ms |
+**To enable locally:**
+```bash
+ANTHROPIC_API_KEY=sk-... npm run test:integration
+# or OPENAI_API_KEY, or GOOGLE_API_KEY — any one works
+```
+
+**To enable in CI:** Add any key to *GitHub → Settings → Secrets → Actions*.
+
+| Test | What it validates |
+|------|------------------|
+| Real fact extraction | LLM extracts ML-relevant facts from `mockWorkingMemory` |
+| Deduplication | Near-duplicate Python facts merged when existing fact has embedding |
+| Pruning applied | All returned facts > 0.2 confidence, count ≤ 50 |
+| **Fact retention — per scenario** | `conversationScenarios` fixture: Python and location conversations each capture at least one expected key concept |
+| Conversation length | Longer conversation → at least as many facts as shorter version |
+| Topic specificity | Python conversation → programming terms; location conversation → location terms |
+
+---
+
+### Benchmarks (`compression.bench.ts`) — 20 benches
+
+Benchmarks are **timing data, not pass/fail**. Results saved as artifacts per commit SHA in CI for trend analysis (90-day retention).
+
+| Group | Benches |
+|-------|---------|
+| Embedding Generation | Single, 5-batch, 10-batch |
+| Similarity Calculation | Cached cosine, fresh similarity with embedding |
+| Fact Comparison | 5 vs 20 cached, 5 vs 50 cached |
+| Confidence Updates | Single fact decay, 50 facts decay |
+| Fact Pruning | 20 facts, 60 facts (triggers MAX_FACTS cap) |
+| **Memory Manager** | initializeMemory, shouldCompress (×2), addMessage, getContext (×3 sizes) |
+| Full Workflow | Embed 5 facts, compare 5 vs 20 end-to-end |
+
+**Baseline numbers from local machine:**
+
+| Operation | Speed |
+|-----------|-------|
+| Single embedding | ~14ms |
 | Cosine similarity (cached) | <1ms |
-| Compare 5 vs 20 facts (cached) | ~1-5ms |
-| Compare 5 vs 50 facts (cached) | ~2-10ms |
-| Prune 60 facts to 50 | <5ms |
+| 5 vs 20 full comparison | ~80ms |
+| addMessage (no compression) | <1ms |
+| getContext (50 facts) | <1ms |
+| Prune 20 facts | ~7µs |
+| Prune 60 facts (capped) | ~0.5ms |
 
-**Full compression workflow** (without LLM calls):
-- With cached embeddings: **<100ms**
-- With fresh embedding generation: **~500ms-2s** (first time)
+---
 
-Compare to old system: **2-5 minutes** with 100+ LLM API calls!
+## How Tests Protect Against Regressions
+
+| Change | Caught by |
+|--------|-----------|
+| Swap embedding model | Dimension test (384), semantic pair tests |
+| Change similarity threshold (0.75) | Merge detection test in unit + integration |
+| Change confidence arithmetic | 11 confidence event tests |
+| Change shouldCompress thresholds | 5 boundary tests |
+| Change getContext filtering/sorting | 8 context shape tests |
+| Change addMessage format | 5 working memory tests |
+| LLM returns malformed JSON | Graceful fallback test |
+| MAX_FACTS cap changed | Pruning limit test |
+| Performance regression | Benchmark artifact comparison across PRs |
+| End-to-end extraction quality drops | Integration fact retention tests (with API key) |
+
+---
 
 ## Writing New Tests
 
-### Unit Test Example
+### Unit test (mocking the LLM)
 
 ```typescript
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import * as llmModule from '../../src/services/llm';
 import { embeddingService } from '../../src/services/embedding';
 
 describe('Your Feature', () => {
@@ -128,166 +197,39 @@ describe('Your Feature', () => {
     await embeddingService.initialize();
   }, 60000);
 
-  it('should do something', async () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('should handle LLM response', async () => {
+    vi.spyOn(llmModule.llmService, 'generateCompletion').mockResolvedValue({
+      content: JSON.stringify([{ content: 'Test fact', confidence: 0.7, ... }]),
+    });
+
     const result = await yourFunction();
-    expect(result).toBe(expected);
+    expect(result).toEqual(expected);
   });
 });
 ```
 
-### Benchmark Example
+**Important:** Always use `vi.spyOn` on the singleton rather than `vi.mock()` inside a test body. `vi.mock()` is hoisted to module scope by Vitest and will pollute subsequent tests in the same file.
+
+### Integration test
+
+Add tests to `tests/integration/` and gate with `describe.skipIf(!hasLLMApiKey)`. They skip automatically in environments without an API key.
+
+### Benchmark
 
 ```typescript
-import { bench, describe } from 'vitest';
-
-describe('Your Feature Performance', () => {
-  bench('operation name', async () => {
-    await yourExpensiveOperation();
-  });
+bench('your operation', async () => {
+  await yourExpensiveOperation();
 });
 ```
 
-## Test Data
+---
 
-### Fixtures (`fixtures/test-data.ts`)
+## First-Run Note
 
-Pre-defined test data includes:
-- `mockFacts` - Sample facts with varying confidence
-- `mockWorkingMemory` - Example conversation text
-- `mockCoreContext` - Topic and context
-- `similarTextPairs` - Pairs for similarity testing
-- `conversationScenarios` - Full conversation examples
-
-Feel free to add more fixtures as needed!
-
-## Debugging Tests
-
-### Run specific test
-
-```bash
-npm test -- embedding
-npm test -- longTermMemory
-```
-
-### Run with verbose output
-
-```bash
-npm test -- --reporter=verbose
-```
-
-### Debug in VS Code
-
-Add to `.vscode/launch.json`:
-
-```json
-{
-  "type": "node",
-  "request": "launch",
-  "name": "Debug Tests",
-  "runtimeExecutable": "npm",
-  "runtimeArgs": ["test"],
-  "cwd": "${workspaceFolder}/apps/core-service",
-  "console": "integratedTerminal"
-}
-```
-
-## CI/CD Integration
-
-### GitHub Actions
-
-The workflow `.github/workflows/test-core-service.yml`:
-1. Runs on push/PR to main branches
-2. Installs dependencies
-3. Runs unit tests
-4. Runs benchmarks
-5. Generates coverage report
-6. Uploads coverage as artifact
-
-### Local CI Simulation
-
-```bash
-# Simulate CI environment
-CI=true npm run test:run
-CI=true npm run bench:run
-```
-
-## Coverage Reports
-
-After running `npm run test:coverage`:
-- **Text**: Printed to console
-- **HTML**: `coverage/index.html` - open in browser
-- **JSON**: `coverage/coverage-final.json` - for tools
-
-## Known Limitations
-
-### Tests Requiring LLM API
-
-Some tests are marked with `.skip` because they require LLM API calls:
-
-```typescript
-it.skip('should extract facts from working memory', async () => {
-  // Requires OPENAI_API_KEY or similar
-});
-```
-
-To run these tests:
-1. Set up LLM API keys in environment
-2. Remove `.skip` from test
-3. Run tests (will incur API costs)
-
-### First Run Performance
-
-The first test run downloads the embedding model (~23 MB):
-- **First run**: 30-60 seconds for model download
-- **Subsequent runs**: Instant (model cached)
-
-Cache location:
-- Windows: `C:\Users\<user>\AppData\Local\transformers\cache`
+The embedding model (~23 MB) is downloaded on first run and cached:
+- Windows: `%LOCALAPPDATA%\transformers\cache`
 - Linux/Mac: `~/.cache/huggingface/transformers`
 
-## Troubleshooting
-
-### Model Download Fails
-
-```bash
-# Clear cache and retry
-rm -rf ~/.cache/huggingface/transformers  # Linux/Mac
-# or
-Remove-Item -Recurse $env:APPDATA\Local\transformers  # Windows PowerShell
-
-npm test
-```
-
-### Tests Timeout
-
-Increase timeout in `vitest.config.ts`:
-
-```typescript
-test: {
-  testTimeout: 60000, // 60 seconds
-}
-```
-
-### Out of Memory
-
-The embedding model uses ~200MB RAM. If running many tests in parallel:
-
-```bash
-# Run tests sequentially
-npm test -- --no-threads
-```
-
-## Future Enhancements
-
-- [ ] Memory manager tests (`memory.test.ts`)
-- [ ] Integration tests with real LLM API (optional)
-- [ ] Custom memory evaluation framework
-- [ ] Fact retention accuracy tests
-- [ ] Relevance scoring tests
-- [ ] Visual regression testing for embeddings
-
-## Resources
-
-- [Vitest Documentation](https://vitest.dev/)
-- [Xenova/transformers](https://github.com/xenova/transformers.js)
-- [Testing Best Practices](../../../docs/TESTING_TOOLS_EVALUATION.md)
+**First run:** 30–60 seconds. **Subsequent runs:** instant.

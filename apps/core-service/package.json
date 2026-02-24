@@ -10,6 +10,7 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "test:eval": "vitest run --include 'tests/evaluation/**/*.eval.ts'",
     "test:integration": "vitest run --include 'tests/integration/**/*.integration.test.ts'",
     "bench": "vitest bench",
     "bench:run": "vitest bench --run",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "tsx": "^4.20.6",
     "typescript": "^5",

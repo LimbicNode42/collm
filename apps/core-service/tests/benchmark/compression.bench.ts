@@ -1,8 +1,42 @@
-import { bench, describe, beforeAll } from 'vitest';
+import { bench, describe, beforeAll, vi } from 'vitest';
 import { embeddingService } from '../../src/services/embedding';
 import { longTermMemory } from '../../src/services/longTermMemory';
+import { HierarchicalMemoryManager } from '../../src/services/memory';
 import { mockFacts, mockWorkingMemory, mockCoreContext } from '../fixtures/test-data';
-import { FactSource, KeyFact } from '../../src/types/domain';
+import { FactSource, KeyFact, Message, MessageStatus, Node, NodeMemory } from '../../src/types/domain';
+
+// ── Helpers for memory.ts benchmarks ─────────────────────────────────────────
+
+function makeNode(workingMemory = '', messageCount = 0, keyFacts: KeyFact[] = []): Node {
+  return {
+    id: 'bench-node',
+    topic: 'Machine Learning',
+    description: 'Benchmark node',
+    model: 'claude-sonnet-4-5-20250929',
+    version: 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    memory: {
+      coreContext: mockCoreContext,
+      workingMemory,
+      keyFacts,
+      messageCount,
+      lastSummaryAt: 0,
+    },
+  };
+}
+
+function makeMessage(content: string): Message {
+  return {
+    id: `msg-${Date.now()}`,
+    content,
+    userId: 'user-1',
+    nodeId: 'bench-node',
+    targetNodeVersion: 1,
+    status: MessageStatus.ACCEPTED,
+    createdAt: new Date(),
+  };
+}
 
 describe('Memory Compression Performance Benchmarks', () => {
   beforeAll(async () => {
@@ -167,6 +201,79 @@ describe('Memory Compression Performance Benchmarks', () => {
       }));
 
       longTermMemory.pruneFactsByConfidence(facts);
+    });
+  });
+
+  // ── Memory Manager (HierarchicalMemoryManager) ───────────────────────────
+
+  describe('Memory Manager', () => {
+    let manager: HierarchicalMemoryManager;
+
+    beforeAll(() => {
+      manager = new HierarchicalMemoryManager();
+    });
+
+    bench('initializeMemory', () => {
+      manager.initializeMemory('Machine Learning', 'User is a data scientist with 5 years experience');
+    });
+
+    bench('shouldCompress — below threshold (fast path)', () => {
+      const memory: NodeMemory = {
+        coreContext: mockCoreContext,
+        workingMemory: 'Short memory',
+        keyFacts: [],
+        messageCount: 1,
+        lastSummaryAt: 0,
+      };
+      manager.shouldCompress(memory);
+    });
+
+    bench('shouldCompress — checks token estimate (17k chars)', () => {
+      const memory: NodeMemory = {
+        coreContext: mockCoreContext,
+        workingMemory: 'x'.repeat(17000),
+        keyFacts: [],
+        messageCount: 1,
+        lastSummaryAt: 0,
+      };
+      manager.shouldCompress(memory);
+    });
+
+    bench('addMessage — no compression (below threshold)', async () => {
+      // Reset to messageCount 0 each iteration so compression never fires
+      const node = makeNode('', 0);
+      await manager.addMessage(node, makeMessage('Tell me about Python'), 'Python is great!');
+    });
+
+    bench('getContext — no facts', async () => {
+      const node = makeNode(mockWorkingMemory, 2, []);
+      await manager.getContext(node, []);
+    });
+
+    bench('getContext — 10 facts', async () => {
+      const facts: KeyFact[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `f-${i}`,
+        content: `Fact ${i}`,
+        confidence: 0.5 + (i / 20),
+        source: FactSource.LLM_INFERRED,
+        extractedAt: Date.now(),
+        supportingEvidence: [],
+      }));
+      const node = makeNode(mockWorkingMemory, 2, facts);
+      await manager.getContext(node, []);
+    });
+
+    bench('getContext — 50 facts (MAX_FACTS cap)', async () => {
+      const facts: KeyFact[] = Array.from({ length: 50 }, (_, i) => ({
+        id: `f-${i}`,
+        content: `Fact ${i} about some topic that user mentioned during the conversation`,
+        confidence: 0.5 + (i / 100),
+        source: FactSource.LLM_INFERRED,
+        extractedAt: Date.now(),
+        supportingEvidence: [],
+      }));
+      const node = makeNode(mockWorkingMemory, 2, facts);
+      await manager.getContext(node, []);
     });
   });
 

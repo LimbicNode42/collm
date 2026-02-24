@@ -32,14 +32,14 @@ jobs:
         run: npm ci
         working-directory: ./apps/core-service
 
-      - name: Run unit tests
+      - name: Run unit + evaluation tests
         run: npm run test:run
         working-directory: ./apps/core-service
 
-      - name: Generate coverage report
+      - name: Generate coverage report (enforces thresholds)
         run: npm run test:coverage
         working-directory: ./apps/core-service
-        continue-on-error: true   # Coverage failure is informational, not blocking
+        # Coverage failures ARE blocking — thresholds configured in vitest.config.ts
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -120,6 +120,15 @@ jobs:
 
       - name: Run integration tests
         run: npm run test:integration
+        working-directory: ./apps/core-service
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+      - name: Run evaluation quality gates (live LLM)
+        # Re-runs the eval suite WITH the API key so the quality gate sections execute
+        run: npm run test:eval
         working-directory: ./apps/core-service
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
