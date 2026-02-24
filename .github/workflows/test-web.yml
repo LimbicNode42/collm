@@ -1,0 +1,76 @@
+name: Web Tests
+
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/test-web.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/web/**'
+
+jobs:
+
+  # ── Job 1: Unit tests ──────────────────────────────────────────────────────
+  # API route handlers + proxy utilities (Node env) and React components
+  # (jsdom env). No running Next.js server, no real network calls.
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/web
+
+      - name: Run unit tests
+        run: npm run test:run
+        working-directory: ./apps/web
+
+      - name: Generate coverage report (enforces thresholds)
+        run: npm run test:coverage
+        working-directory: ./apps/web
+        # Thresholds: 70% lines/functions/statements, 60% branches (vitest.config.ts)
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-coverage-report
+          path: apps/web/coverage/
+          retention-days: 14
+
+  # ── Job 2: Build check ────────────────────────────────────────────────────
+  # next build catches TypeScript errors, broken imports, and missing
+  # environment-specific issues that unit tests cannot detect.
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/web
+
+      - name: Build Next.js app
+        run: npm run build
+        working-directory: ./apps/web
+        env:
+          # Suppress "No .env file found" warnings during build
+          NEXT_TELEMETRY_DISABLED: 1
