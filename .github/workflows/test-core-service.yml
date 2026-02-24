@@ -1,0 +1,127 @@
+name: Core Service Tests
+
+on:
+  push:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/core-service/**'
+      - '.github/workflows/test-core-service.yml'
+  pull_request:
+    branches: [master, main, develop]
+    paths:
+      - 'apps/core-service/**'
+
+jobs:
+
+  # ── Job 1: Unit tests ──────────────────────────────────────────────────────
+  # Always runs. No LLM keys needed. Fast (~30s).
+  # Blocks merge if any unit test fails.
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/core-service
+
+      - name: Run unit tests
+        run: npm run test:run
+        working-directory: ./apps/core-service
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+        working-directory: ./apps/core-service
+        continue-on-error: true   # Coverage failure is informational, not blocking
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: apps/core-service/coverage/
+          retention-days: 14
+
+  # ── Job 2: Benchmarks ──────────────────────────────────────────────────────
+  # Always runs. Records timing data as a CI artifact so you can spot
+  # regressions by comparing across runs in the Actions UI.
+  # Does NOT fail CI — it's informational only.
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: unit-tests   # Only run if unit tests pass
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/core-service
+
+      - name: Run benchmarks
+        run: npm run bench:run
+        working-directory: ./apps/core-service
+
+      - name: Save benchmark results
+        run: npm run bench:report
+        working-directory: ./apps/core-service
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: apps/core-service/tests/benchmark/results.json
+          retention-days: 90   # Keep 3 months of results for trend analysis
+
+  # ── Job 3: Integration tests ───────────────────────────────────────────────
+  # Runs only when at least one LLM API key secret is configured.
+  # Uses the real LLM to validate end-to-end fact extraction.
+  # Skipped silently when no keys present — does NOT block PRs.
+  #
+  # To enable: add any of these in GitHub → Settings → Secrets → Actions:
+  #   OPENAI_API_KEY      (uses claude-sonnet-4-5 by default → switch to gpt-4 if preferred)
+  #   ANTHROPIC_API_KEY
+  #   GOOGLE_API_KEY
+  integration-tests:
+    name: Integration Tests (live LLM)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    # Only run when at least one key secret exists in this repo
+    if: |
+      secrets.OPENAI_API_KEY != '' ||
+      secrets.ANTHROPIC_API_KEY != '' ||
+      secrets.GOOGLE_API_KEY != ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./apps/core-service
+
+      - name: Run integration tests
+        run: npm run test:integration
+        working-directory: ./apps/core-service
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}

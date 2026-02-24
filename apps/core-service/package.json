@@ -5,7 +5,15 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --include 'tests/integration/**/*.integration.test.ts'",
+    "bench": "vitest bench",
+    "bench:run": "vitest bench --run",
+    "bench:report": "vitest bench --run --reporter=json > tests/benchmark/results.json"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.936.0",
@@ -21,7 +29,9 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@vitest/ui": "^4.0.18",
     "tsx": "^4.20.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
