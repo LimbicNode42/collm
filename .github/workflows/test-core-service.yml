@@ -107,10 +107,7 @@ jobs:
     env:
       HUSKY: '0'
     # Only run when at least one key secret exists in this repo
-    if: |
-      secrets.OPENAI_API_KEY != '' ||
-      secrets.ANTHROPIC_API_KEY != '' ||
-      secrets.GOOGLE_API_KEY != ''
+    if: ${{ secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.GOOGLE_API_KEY != '' }}
 
     steps:
       - uses: actions/checkout@v4

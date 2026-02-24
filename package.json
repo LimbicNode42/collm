@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "prepare": "husky",
+    "prepare": "husky || true",
     "dev": "node scripts/dev.js"
   },
   "lint-staged": {
