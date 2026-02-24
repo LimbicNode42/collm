@@ -19,6 +19,8 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
 
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +57,8 @@ jobs:
   build-check:
     name: Build Check
     runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
 
     steps:
       - uses: actions/checkout@v4

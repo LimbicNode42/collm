@@ -22,6 +22,8 @@ jobs:
   smoke-test:
     name: Migrator Smoke Test
     runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
 
     services:
       postgres:
