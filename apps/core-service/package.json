@@ -11,7 +11,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:eval": "vitest run tests/evaluation/**/*.eval.ts",
-    "test:integration": "vitest run tests/integration/**/*.integration.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "bench": "vitest bench",
     "bench:run": "vitest bench --run",
     "bench:report": "vitest bench --run --reporter=json > tests/benchmark/results.json"
