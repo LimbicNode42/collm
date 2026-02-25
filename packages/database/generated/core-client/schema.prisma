@@ -12,7 +12,7 @@ datasource db {
 
 model Node {
   id          String  @id @default(cuid())
-  topic       String
+  topic       String  @unique
   description String?
 
   // Structured memory fields replacing simple 'state'
@@ -22,11 +22,11 @@ model Node {
   messageCount  Int    @default(0)
   lastSummaryAt Int    @default(0) // Message count when last summarized
 
-  embedding Unsupported("vector(1536)")?
-  model     String                       @default("claude-sonnet-4-5-20250929")
-  version   Int                          @default(1)
-  createdAt DateTime                     @default(now())
-  updatedAt DateTime                     @updatedAt
+  embedding Unsupported("vector(384)")?
+  model     String                      @default("claude-sonnet-4-5-20250929")
+  version   Int                         @default(1)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
   messages  Message[]
 }
 

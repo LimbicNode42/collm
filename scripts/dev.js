@@ -1,36 +1,37 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const dotenv = require('dotenv');
 
-const dbPath = path.resolve(__dirname, '../packages/database/prisma/user.db');
-// Ensure proper formatting for Windows paths in URL
-const dbUrl = `file:${dbPath.replace(/\\/g, '/')}`;
+// Load root .env so all vars are available
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-console.log(`Using Database URL: ${dbUrl}`);
+const sharedEnv = {
+  ...process.env,
+  JWT_SECRET: process.env.JWT_SECRET || 'dev-secret-123',
+};
 
 // Define the services to run
 const services = [
-  {
-    name: 'message-service',
-    command: 'npm',
-    args: ['run', 'dev'],
-    cwd: path.join(__dirname, '../apps/message-service'),
-    env: { 
-      ...process.env, 
-      DATABASE_URL: dbUrl,
-      DATABASE_URL_USER: dbUrl,
-      JWT_SECRET: 'dev-secret-123'
-    }
-  },
   {
     name: 'user-service',
     command: 'npm',
     args: ['run', 'dev'],
     cwd: path.join(__dirname, '../apps/user-service'),
-    env: { 
-      ...process.env, 
-      DATABASE_URL: dbUrl,
-      DATABASE_URL_USER: dbUrl,
-      JWT_SECRET: 'dev-secret-123'
+    env: {
+      ...sharedEnv,
+      DATABASE_URL_USER: process.env.DATABASE_URL_USER,
+      PORT: '3002',
+    }
+  },
+  {
+    name: 'message-service',
+    command: 'npm',
+    args: ['run', 'dev'],
+    cwd: path.join(__dirname, '../apps/message-service'),
+    env: {
+      ...sharedEnv,
+      DATABASE_URL_CORE: process.env.DATABASE_URL_CORE,
+      PORT: '3001',
     }
   },
   {
@@ -38,11 +39,10 @@ const services = [
     command: 'npm',
     args: ['run', 'dev'],
     cwd: path.join(__dirname, '../apps/core-service'),
-    env: { 
-      ...process.env, 
-      DATABASE_URL: dbUrl,
-      DATABASE_URL_USER: dbUrl,
-      JWT_SECRET: 'dev-secret-123'
+    env: {
+      ...sharedEnv,
+      DATABASE_URL_CORE: process.env.DATABASE_URL_CORE,
+      PORT: '3003',
     }
   },
   {
@@ -50,7 +50,13 @@ const services = [
     command: 'npm',
     args: ['run', 'dev'],
     cwd: path.join(__dirname, '../apps/web'),
-    env: { ...process.env }
+    env: {
+      ...sharedEnv,
+      CORE_SERVICE_URL: process.env.CORE_SERVICE_URL || 'http://localhost:3003',
+      USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'http://localhost:3002',
+      MESSAGE_SERVICE_URL: process.env.MESSAGE_SERVICE_URL || 'http://localhost:3001',
+      PORT: '3000',
+    }
   }
 ];
 
@@ -85,7 +91,7 @@ const children = services.map(startService);
 
 // Handle exit
 process.on('SIGINT', () => {
-  console.log('Stopping all services...');
+  console.log('\nStopping all services...');
   children.forEach(child => child.kill());
   process.exit();
 });

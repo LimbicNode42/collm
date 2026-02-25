@@ -3204,10 +3204,10 @@ export namespace Prisma {
 
   export type NodeWhereUniqueInput = Prisma.AtLeast<{
     id?: string
+    topic?: string
     AND?: NodeWhereInput | NodeWhereInput[]
     OR?: NodeWhereInput[]
     NOT?: NodeWhereInput | NodeWhereInput[]
-    topic?: StringFilter<"Node"> | string
     description?: StringNullableFilter<"Node"> | string | null
     coreContext?: StringFilter<"Node"> | string
     workingMemory?: StringFilter<"Node"> | string
@@ -3219,7 +3219,7 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"Node"> | Date | string
     updatedAt?: DateTimeFilter<"Node"> | Date | string
     messages?: MessageListRelationFilter
-  }, "id">
+  }, "id" | "topic">
 
   export type NodeOrderByWithAggregationInput = {
     id?: SortOrder

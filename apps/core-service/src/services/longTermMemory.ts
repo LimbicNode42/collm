@@ -268,19 +268,6 @@ JSON array:`;
     return null;
   }
 
-  /**
-   * Legacy method - kept for backwards compatibility but now uses embedding service
-   */
-  private async findSimilarFact(candidate: Omit<KeyFact, 'id' | 'extractedAt'>, existingFacts: KeyFact[]): Promise<KeyFact | null> {
-    for (const existing of existingFacts) {
-      const similarity = await this.calculateSimilarity(candidate.content, existing.content);
-      if (similarity >= this.SIMILARITY_THRESHOLD) {
-        return existing;
-      }
-    }
-    return null;
-  }
-
   private mergeFacts(existing: KeyFact, candidate: Omit<KeyFact, 'id' | 'extractedAt'>): KeyFact {
     return {
       ...existing,

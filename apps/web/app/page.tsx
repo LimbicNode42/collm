@@ -1,17 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { User } from '../types/api';
 
+const MODELS = [
+  'claude-sonnet-4-5-20250929',
+  'claude-haiku-4-5-20251001',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+];
+
 export default function Home() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [question, setQuestion] = useState('');
+  const [model, setModel] = useState(MODELS[0]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [matchInfo, setMatchInfo] = useState<{ topic: string; similarity: number } | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    const stored = localStorage.getItem('user');
+    if (stored) setUser(JSON.parse(stored));
+    inputRef.current?.focus();
   }, []);
 
   const handleLogout = () => {
@@ -20,87 +36,162 @@ export default function Home() {
     setUser(null);
   };
 
+  async function handleAsk(e: React.FormEvent) {
+    e.preventDefault();
+    const q = question.trim();
+    if (!q || loading) return;
+
+    setLoading(true);
+    setError('');
+    setMatchInfo(null);
+
+    try {
+      const res = await fetch('/api/nodes/find-or-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, model }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to find or create conversation');
+      }
+
+      const data = await res.json();
+
+      if (data.existingNode) {
+        // Brief flash of "found a match" before redirecting
+        setMatchInfo({ topic: data.topic, similarity: data.similarity });
+        await new Promise(r => setTimeout(r, 800));
+      }
+
+      router.push(`/nodes/${data.id}`);
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong');
+      setLoading(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAsk(e as any);
+    }
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Collm - Collaborative LLM
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex flex-col">
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-6 py-4">
+        <span className="font-bold text-indigo-700 text-lg tracking-tight">Collm</span>
+        <div className="flex items-center gap-3">
           {user ? (
-            <div className="flex gap-4 items-center">
-              <span>Welcome, {user.name || user.email}</span>
+            <>
+              <span className="text-sm text-gray-500">{user.name || user.email}</span>
               <button
                 onClick={handleLogout}
-                className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500"
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
               >
                 Logout
               </button>
-            </div>
+            </>
           ) : (
-            <div className="flex gap-4">
-              <Link
-                href="/login"
-                className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-              >
-                Login
-              </Link>
+            <>
+              <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">Login</Link>
               <Link
                 href="/register"
-                className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+                className="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Register
               </Link>
-            </div>
+            </>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-to-br before:from-transparent before:to-blue-700 before:opacity-10 after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-to-t after:from-blue-900 after:via-blue-900 after:opacity-40 before:lg:h-[360px] z-[-1]">
-        <h1 className="text-6xl font-bold">Collm</h1>
-      </div>
+      {/* Main content */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 -mt-16">
+        <div className="w-full max-w-2xl space-y-8">
+          {/* Heading */}
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold text-gray-900">Ask anything</h1>
+            <p className="text-gray-500 text-sm">
+              Your question will find an existing conversation or start a new one.
+            </p>
+          </div>
 
-      <div className="mt-16 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-3 lg:text-left gap-6">
-        <Link
-          href="/test"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Test Features{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Comprehensive testing dashboard for all system features without remembering URLs.
-          </p>
-        </Link>
+          {/* Question form */}
+          <form onSubmit={handleAsk} className="space-y-3">
+            <div className="bg-white rounded-2xl border shadow-sm hover:shadow-md transition-shadow p-4 space-y-3">
+              <textarea
+                ref={inputRef}
+                value={question}
+                onChange={e => {
+                  setQuestion(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="What would you like to explore? (Enter to send)"
+                rows={2}
+                disabled={loading}
+                className="w-full resize-none text-base text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:opacity-50"
+              />
+              <div className="flex items-center justify-between gap-3 pt-1 border-t border-gray-100">
+                <select
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  aria-label="Select AI model"
+                  className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <button
+                  type="submit"
+                  disabled={loading || !question.trim()}
+                  className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      {matchInfo ? 'Found a match…' : 'Searching…'}
+                    </>
+                  ) : 'Ask →'}
+                </button>
+              </div>
+            </div>
 
-        <Link
-          href="/debug/queue"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Queue Debug{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Debug message queue operations and processing.
-          </p>
-        </Link>
+            {/* Match feedback */}
+            {matchInfo && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800 flex items-center gap-2">
+                <span>✓</span>
+                <span>
+                  Found existing conversation: <strong>&ldquo;{matchInfo.topic}&rdquo;</strong>
+                  {' '}
+                  <span className="text-green-600 text-xs">({Math.round(matchInfo.similarity * 100)}% match)</span>
+                </span>
+              </div>
+            )}
 
-        <div className="group rounded-lg border border-transparent px-5 py-4">
-          <h2 className="mb-3 text-2xl font-semibold">Features</h2>
-          <ul className="m-0 max-w-[30ch] text-sm opacity-50 list-disc list-inside">
-            <li>Multi-model LLM support</li>
-            <li>Node-based conversations</li>
-            <li>Real-time processing</li>
-            <li>User management</li>
-          </ul>
+            {/* Error */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+          </form>
+
+          {/* Browse link */}
+          <div className="text-center">
+            <Link
+              href="/nodes"
+              className="text-sm text-gray-400 hover:text-indigo-600 transition-colors"
+            >
+              Browse all conversations →
+            </Link>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

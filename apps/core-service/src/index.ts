@@ -7,7 +7,7 @@ import jwt from '@fastify/jwt';
 import { coreEngine } from './services/core';
 import { llmService } from './services/llm';
 import { memoryManager } from './services/memory';
-// import { prismaCore } from '@collm/database';
+import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
 // import { parseKeyFactsFromDb } from './utils/factConversion';
@@ -42,6 +42,30 @@ fastify.post<{
   }
 
   try {
+    // Check if a node with this topic already exists — topics must be unique
+    const existing = await prismaCore.node.findUnique({ where: { topic } });
+    if (existing) {
+      const nodeResponse: CoreService.NodeResponse = {
+        id: existing.id,
+        topic: existing.topic,
+        description: existing.description || '',
+        model: existing.model,
+        memory: {
+          coreContext: existing.coreContext || '',
+          workingMemory: existing.workingMemory || '',
+          keyFacts: Array.isArray(existing.keyFacts)
+            ? (existing.keyFacts as any[]).map((f: any) => f?.content || String(f))
+            : [],
+          messageCount: existing.messageCount || 0,
+          lastSummaryAt: existing.lastSummaryAt ? new Date(existing.lastSummaryAt).toISOString() : null,
+        },
+        createdAt: existing.createdAt.toISOString(),
+        updatedAt: existing.updatedAt.toISOString(),
+      };
+      // 200 with existingNode flag so the UI can redirect
+      return reply.code(200).send({ ...nodeResponse, existingNode: true } as any);
+    }
+
     const node = await coreEngine.createNode(
       topic,
       description || 'Node created via API',
@@ -112,6 +136,59 @@ fastify.get<{
   }
 });
 
+// Find an existing node by semantic similarity to a question, or create a new one
+fastify.post('/nodes/find-or-create', async (request, reply) => {
+  const { question, model } = request.body as { question: string; model?: string };
+
+  if (!question?.trim()) {
+    return reply.code(400).send({ error: 'Question is required' });
+  }
+
+  try {
+    const existingNodes = await coreEngine.listNodes();
+
+    if (existingNodes.length > 0) {
+      const { embeddingService } = await import('./services/embedding');
+      await embeddingService.initialize();
+
+      const qEmbedding = await embeddingService.embed(question);
+      let bestNode = existingNodes[0];
+      let bestSim = -1;
+
+      for (const n of existingNodes) {
+        const tEmbedding = await embeddingService.embed(n.topic);
+        const sim = embeddingService.cosineSimilarity(qEmbedding, tEmbedding);
+        if (sim > bestSim) { bestSim = sim; bestNode = n; }
+      }
+
+      if (bestSim >= 0.55) {
+        return reply.send({
+          id: bestNode.id,
+          topic: bestNode.topic,
+          existingNode: true,
+          similarity: bestSim,
+        });
+      }
+    }
+
+    // No match — create new node using the question as topic
+    const node = await coreEngine.createNode(
+      question.length > 120 ? question.slice(0, 117) + '…' : question,
+      question,
+      model || 'claude-sonnet-4-5-20250929'
+    );
+
+    return reply.code(201).send({
+      id: node.id,
+      topic: node.topic,
+      existingNode: false,
+    });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
 fastify.get('/nodes/:id', async (request, reply) => {
   const { id } = request.params as { id: string };
   try {
@@ -120,6 +197,35 @@ fastify.get('/nodes/:id', async (request, reply) => {
       return reply.code(404).send({ error: 'Node not found' });
     }
     return reply.send({ success: true, node });
+  } catch (error) {
+    request.log.error(error);
+    return reply.code(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+// Messages for a node
+fastify.get('/nodes/:id/messages', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const query = request.query as { limit?: string; before?: string };
+  const limit = Math.min(parseInt(query.limit || '100', 10), 200);
+
+  try {
+    const messages = await prismaCore.message.findMany({
+      where: { nodeId: id },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+
+    return reply.send({
+      messages: messages.map(m => ({
+        id: m.id,
+        content: m.content,
+        userId: m.userId,
+        isLlm: m.userId === 'llm',
+        status: m.status,
+        createdAt: m.createdAt.toISOString(),
+      }))
+    });
   } catch (error) {
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal Server Error' });
@@ -164,7 +270,7 @@ fastify.post('/llm/test', async (request, reply) => {
 // Conversational memory testing endpoint
 fastify.post('/llm/chat', async (request, reply) => {
   const body = request.body as any;
-  const { nodeId, message, model } = body;
+  const { nodeId, message, model, userId = 'anonymous', userName } = body;
 
   if (!nodeId || !message) {
     return reply.code(400).send({ error: 'nodeId and message are required' });
@@ -199,21 +305,42 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
     );
     const duration = Date.now() - startTime;
 
-    // 4. Create a temporary message object for memory update
+    // 4. Persist the user message to the database
+    const userMessage = await prismaCore.message.create({
+      data: {
+        content: message,
+        userId: userName || userId,
+        nodeId: nodeId,
+        targetNodeVersion: node.version,
+        status: MessageStatus.ACCEPTED,
+      }
+    });
+
+    // 5. Persist the LLM response to the database
+    await prismaCore.message.create({
+      data: {
+        content: llmResponse.content,
+        userId: 'llm',
+        nodeId: nodeId,
+        targetNodeVersion: node.version,
+        status: MessageStatus.ACCEPTED,
+      }
+    });
+
+    // 6. Update node memory with this conversation turn
     const tempMessage = {
-      id: `temp-${Date.now()}`,
+      id: userMessage.id,
       content: message,
-      userId: 'memory-test-user',
+      userId: userName || userId,
       nodeId: nodeId,
       targetNodeVersion: node.version,
       status: MessageStatus.ACCEPTED,
-      createdAt: new Date()
+      createdAt: userMessage.createdAt
     };
 
-    // 5. Update node memory with this conversation turn
     const updatedMemory = await memoryManager.addMessage(node, tempMessage, llmResponse.content);
 
-    // 6. Save the updated memory to database
+    // 7. Save the updated memory to database
     const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
 
     return reply.send({

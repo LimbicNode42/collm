@@ -1,4 +1,5 @@
 import { prismaCore } from '@collm/database';
+import { embeddingService } from './embedding';
 
 export interface VectorSearchResult {
   nodeId: string;
@@ -57,10 +58,9 @@ export class PrismaVectorStore implements IVectorStore {
   }
 
   private async generateEmbedding(text: string): Promise<number[]> {
-    // TODO: Replace with actual OpenAI call
-    // For now, return a random vector of dimension 1536
-    console.log(`[VectorStore] Generating mock embedding for: "${text.substring(0, 20)}..."`);
-    return new Array(1536).fill(0).map(() => Math.random());
+    // Use local embedding service — fast, free, no API calls
+    // Produces 384-dimensional normalized vectors (all-MiniLM-L6-v2)
+    return embeddingService.embed(text);
   }
 }
 
