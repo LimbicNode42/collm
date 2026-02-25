@@ -10,6 +10,82 @@ import { memoryManager } from './services/memory';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
+
+// ---------------------------------------------------------------------------
+// Context-window budget management
+// ---------------------------------------------------------------------------
+const OUTPUT_RESERVE_TOKENS = 8192;   // tokens we always reserve for the response
+const CONTEXT_BUDGET_TOKENS  = 150_000; // conservative limit (fits Claude 200K, GPT-4 128K)
+const MAX_USER_MESSAGE_CHARS = 20_000;  // ~5 000 tokens — hard cap on a single user turn
+
+/** Rough characters-to-tokens estimate (4 chars ≈ 1 token) */
+function estimateTokens(text: string): number {
+  return Math.ceil((text || '').length / 4);
+}
+
+/**
+ * Builds a system prompt that fits inside the available token budget.
+ * Sections are trimmed in priority order (least important first):
+ *   1. keyFacts   — drop lowest-confidence facts until within budget
+ *   2. workingMemory — keep most-recent content by trimming from the front
+ *   3. coreContext   — last resort, trim from the front
+ */
+function buildBudgetedSystemPrompt(
+  coreContext: string,
+  workingMemory: string,
+  keyFacts: string[],
+  userMessageChars: number
+): { systemPrompt: string; wasTrimmed: boolean } {
+  const userTokens      = Math.ceil(userMessageChars / 4);
+  const availableTokens = CONTEXT_BUDGET_TOKENS - OUTPUT_RESERVE_TOKENS - userTokens - 200; // 200 overhead
+
+  const preamble = `You are an AI assistant having a focused conversation about the following topic.\n\n`;
+  const footer   = `\n\nStay focused on the core topic while being helpful and engaging. Build upon previous context naturally. Keep responses concise — aim for 2–4 short paragraphs unless the user specifically asks for a longer or more detailed answer.`;
+  const fixedTokens = estimateTokens(preamble + footer);
+
+  let wasTrimmed   = false;
+  let factsText    = keyFacts.length > 0 ? `KEY FACTS TO REMEMBER:\n- ${keyFacts.join('\n- ')}\n\n` : '';
+  let contextBlock = `${coreContext}\n\nCURRENT CONTEXT:\n${workingMemory}`;
+
+  // Step 1: trim keyFacts until within budget
+  let remainingFacts = [...keyFacts];
+  while (
+    remainingFacts.length > 0 &&
+    estimateTokens(preamble + contextBlock + factsText + footer) + fixedTokens > availableTokens
+  ) {
+    remainingFacts.pop(); // drop from the end (lowest confidence, already sorted)
+    factsText = remainingFacts.length > 0
+      ? `KEY FACTS TO REMEMBER:\n- ${remainingFacts.join('\n- ')}\n\n`
+      : '';
+    wasTrimmed = true;
+  }
+
+  // Step 2: trim workingMemory from the front
+  let trimmedWorking = workingMemory;
+  while (
+    estimateTokens(preamble + contextBlock + factsText + footer) + fixedTokens > availableTokens &&
+    trimmedWorking.length > 200
+  ) {
+    // drop first 10% of working memory
+    trimmedWorking = trimmedWorking.slice(Math.ceil(trimmedWorking.length * 0.1));
+    contextBlock = `${coreContext}\n\nCURRENT CONTEXT:\n${trimmedWorking}`;
+    wasTrimmed = true;
+  }
+
+  // Step 3: trim coreContext from the front (last resort)
+  let trimmedCore = coreContext;
+  while (
+    estimateTokens(preamble + contextBlock + factsText + footer) + fixedTokens > availableTokens &&
+    trimmedCore.length > 100
+  ) {
+    trimmedCore = trimmedCore.slice(Math.ceil(trimmedCore.length * 0.1));
+    contextBlock = `${trimmedCore}\n\nCURRENT CONTEXT:\n${trimmedWorking}`;
+    wasTrimmed = true;
+  }
+
+  const systemPrompt = `${preamble}${contextBlock}\n\n${factsText}${footer}`;
+  return { systemPrompt, wasTrimmed };
+}
 // import { parseKeyFactsFromDb } from './utils/factConversion';
 
 const fastify = Fastify({ logger: true });
@@ -283,29 +359,39 @@ fastify.post('/llm/chat', async (request, reply) => {
       return reply.code(404).send({ error: 'Node not found' });
     }
 
-    // 2. Build context from node's memory
-    const systemPrompt = `You are an AI assistant having a focused conversation about the following topic.
+    // 2. Guard against oversized user messages
+    const safeMessage = message.length > MAX_USER_MESSAGE_CHARS
+      ? message.slice(0, MAX_USER_MESSAGE_CHARS) + '\n\n[Message truncated — exceeded input limit]'
+      : message;
+    if (message.length > MAX_USER_MESSAGE_CHARS) {
+      console.warn(`[Chat] User message truncated from ${message.length} to ${MAX_USER_MESSAGE_CHARS} chars`);
+    }
 
-${node.memory?.coreContext || ''}
+    // 3. Build a context-budgeted system prompt
+    const keyFactStrings = (node.memory?.keyFacts ?? []).map((f: any) =>
+      typeof f === 'string' ? f : (f?.content ?? String(f))
+    );
+    const { systemPrompt, wasTrimmed } = buildBudgetedSystemPrompt(
+      node.memory?.coreContext || '',
+      node.memory?.workingMemory || 'Starting conversation',
+      keyFactStrings,
+      safeMessage.length
+    );
+    if (wasTrimmed) {
+      console.warn(`[Chat] System prompt was trimmed to fit context budget for node ${nodeId}`);
+    }
 
-CURRENT CONTEXT:
-${node.memory?.workingMemory || 'Starting conversation'}
-
-KEY FACTS TO REMEMBER:
-${node.memory?.keyFacts?.join('\n- ') || 'None yet'}
-
-Stay focused on the core topic while being helpful and engaging. Build upon previous context naturally.`;
-
-    // 3. Generate LLM response
+    // 4. Generate LLM response — cap at 2048 output tokens for chat (reduces latency & cost)
     const startTime = Date.now();
     const llmResponse = await llmService.generateCompletion(
-      message,
+      safeMessage,
       systemPrompt,
-      model || node.model || 'claude-sonnet-4-5-20250929'
+      model || node.model || 'claude-sonnet-4-5-20250929',
+      2048
     );
     const duration = Date.now() - startTime;
 
-    // 4. Persist the user message to the database
+    // 5. Persist the user message to the database (store original, not truncated)
     const userMessage = await prismaCore.message.create({
       data: {
         content: message,
@@ -316,7 +402,7 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
       }
     });
 
-    // 5. Persist the LLM response to the database
+    // 6. Persist the LLM response to the database
     await prismaCore.message.create({
       data: {
         content: llmResponse.content,
@@ -327,7 +413,7 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
       }
     });
 
-    // 6. Update node memory with this conversation turn
+    // 7. Update node memory with this conversation turn
     const tempMessage = {
       id: userMessage.id,
       content: message,
@@ -340,40 +426,72 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
 
     const updatedMemory = await memoryManager.addMessage(node, tempMessage, llmResponse.content);
 
-    // 7. Save the updated memory to database
+    // 8. Save the updated memory to database
     const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
 
-    // 8. If compression just happened, fire background topic update
+    // 9. If compression just happened, fire background topic + description update
     if (updatedMemory.lastSummaryAt === updatedMemory.messageCount) {
       (async () => {
         try {
-          const topicPrompt = `Based on this conversation summary, generate a concise topic title (5-10 words, no quotes, no punctuation at end):
+          const metaPrompt = `Based on this conversation summary, return a JSON object with two fields:
+- "topic": a short title of 4-6 words (no quotes, no trailing punctuation)
+- "description": a single sentence (max 150 chars) describing what this conversation covers
 
+CONVERSATION SUMMARY:
 ${updatedMemory.workingMemory}
 
-Topic:`;
-          const topicResponse = await llmService.generateCompletion(
-            topicPrompt,
-            'You are a topic title generator. Return only the title, nothing else.',
-            node.model
+Return only valid JSON, nothing else.`;
+
+          const metaResponse = await llmService.generateCompletion(
+            metaPrompt,
+            'You are a conversation metadata generator. Return only valid JSON with "topic" and "description" fields.',
+            node.model,
+            120 // enough for a short title + one sentence
           );
-          const newTopic = topicResponse.content.trim().replace(/^["']|["']$/g, '').slice(0, 120);
-          if (newTopic && newTopic !== node.topic) {
+
+          let newTopic = node.topic;
+          let newDescription = node.description || node.topic;
+
+          try {
+            const cleaned = metaResponse.content
+              .trim()
+              .replace(/^```(?:json)?\s*/, '')
+              .replace(/\s*```$/, '')
+              .trim();
+            const parsed = JSON.parse(cleaned);
+            if (parsed.topic) newTopic = String(parsed.topic).replace(/^["']|["']$/g, '').slice(0, 80);
+            if (parsed.description) newDescription = String(parsed.description).slice(0, 200);
+          } catch {
+            // JSON parse failed — skip update
+            return;
+          }
+
+          if (newTopic !== node.topic || newDescription !== node.description) {
+            const newCoreContext = `Topic: ${newTopic}\nContext: ${newDescription}`;
             await prismaCore.node.update({
               where: { id: nodeId },
-              data: { topic: newTopic },
+              data: { topic: newTopic, description: newDescription, coreContext: newCoreContext },
             });
-            console.log(`[TopicEvolution] Updated topic: "${node.topic}" → "${newTopic}"`);
+            console.log(`[TopicEvolution] topic="${newTopic}" description="${newDescription}"`);
           }
         } catch {
-          // Ignore — unique constraint violations or LLM errors are non-fatal
+          // Ignore — non-fatal
         }
       })();
+    }
+
+    const warnings: string[] = [];
+    if (message.length > MAX_USER_MESSAGE_CHARS) {
+      warnings.push(`Your message was truncated to ${MAX_USER_MESSAGE_CHARS.toLocaleString()} characters to fit the input limit.`);
+    }
+    if (wasTrimmed) {
+      warnings.push('Conversation history was trimmed to fit the context window. Older context may not be visible to the AI.');
     }
 
     return reply.send({
       success: true,
       response: llmResponse.content,
+      warnings: warnings.length > 0 ? warnings : undefined,
       node: {
         id: updatedNode.id,
         topic: updatedNode.topic,
@@ -386,7 +504,7 @@ Topic:`;
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    request.log.error('LLM chat error:', error);
+    request.log.error({ err: error }, 'LLM chat error');
     return reply.code(500).send({ 
       error: 'Failed to process chat message',
       details: error instanceof Error ? error.message : 'Unknown error'

@@ -130,6 +130,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [loadError, setLoadError] = useState('');
   const [showMemory, setShowMemory] = useState(false);
   const [lastPollAt, setLastPollAt] = useState<Date | null>(null);
+  const [contextWarnings, setContextWarnings] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -155,18 +156,29 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     }
   }
 
-  // Poll for messages
+  // Poll for messages AND refresh node (picks up background topic/memory changes)
   const pollMessages = useCallback(async () => {
     try {
-      const res = await fetch(`/api/nodes/${nodeId}/messages?limit=200`);
-      if (!res.ok) return;
-      const data: { messages: ChatMessage[] } = await res.json();
-      const newOnes = data.messages.filter(m => !knownIdsRef.current.has(m.id));
-      if (newOnes.length > 0) {
-        newOnes.forEach(m => knownIdsRef.current.add(m.id));
-        setMessages(prev => [...prev, ...newOnes]);
-        setTimeout(scrollToBottom, 50);
+      const [msgRes, nodeRes] = await Promise.all([
+        fetch(`/api/nodes/${nodeId}/messages?limit=200`),
+        fetch(`/api/nodes/${nodeId}`),
+      ]);
+
+      if (msgRes.ok) {
+        const data: { messages: ChatMessage[] } = await msgRes.json();
+        const newOnes = data.messages.filter(m => !knownIdsRef.current.has(m.id));
+        if (newOnes.length > 0) {
+          newOnes.forEach(m => knownIdsRef.current.add(m.id));
+          setMessages(prev => [...prev, ...newOnes]);
+          setTimeout(scrollToBottom, 50);
+        }
       }
+
+      if (nodeRes.ok) {
+        const nodeData = await nodeRes.json();
+        setNode(nodeData);
+      }
+
       setLastPollAt(new Date());
     } catch {
       // silent — poll will retry
@@ -225,7 +237,12 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Send failed');
+        throw new Error(err.details || err.error || 'Send failed');
+      }
+
+      const data = await res.json();
+      if (data.warnings?.length) {
+        setContextWarnings(data.warnings);
       }
 
       // Remove optimistic message — the real ones will arrive via poll
@@ -359,6 +376,21 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Context-window warning banner */}
+          {contextWarnings.length > 0 && (
+            <div className="mt-2 flex-shrink-0 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2 text-xs text-amber-800">
+              <span className="flex-shrink-0 text-amber-500 mt-0.5">⚠</span>
+              <div className="flex-1 space-y-0.5">
+                {contextWarnings.map((w, i) => <p key={i}>{w}</p>)}
+              </div>
+              <button
+                onClick={() => setContextWarnings([])}
+                className="flex-shrink-0 text-amber-400 hover:text-amber-600 ml-1 leading-none"
+                aria-label="Dismiss"
+              >✕</button>
+            </div>
+          )}
+
           {/* Input */}
           <form onSubmit={sendMessage} className="mt-3 flex-shrink-0">
             <div className="flex gap-2 bg-white rounded-xl border shadow-sm p-2">
@@ -389,13 +421,19 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         {/* Memory sidebar */}
         {showMemory && node && (
           <div className="w-72 flex-shrink-0 overflow-y-auto space-y-3">
-            <div className="bg-white rounded-xl border shadow-sm p-4">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Core Context
+            <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Topic
               </h3>
-              <p className="text-xs text-gray-700 whitespace-pre-wrap">
-                {node.memory?.coreContext || '—'}
-              </p>
+              <p className="text-sm font-medium text-gray-800">{node.topic}</p>
+              {node.description && node.description !== node.topic && (
+                <>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-1">
+                    Description
+                  </h3>
+                  <p className="text-xs text-gray-600">{node.description}</p>
+                </>
+              )}
             </div>
 
             {(node.memory?.keyFacts?.length ?? 0) > 0 && (

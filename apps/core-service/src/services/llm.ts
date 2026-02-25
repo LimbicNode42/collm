@@ -10,8 +10,9 @@ export interface LLMResponse {
 export interface ILLMService {
   /**
    * Generates a completion for the given prompt.
+   * @param maxTokens Maximum output tokens. Defaults to 8192.
    */
-  generateCompletion(prompt: string, systemPrompt?: string, model?: string): Promise<LLMResponse>;
+  generateCompletion(prompt: string, systemPrompt?: string, model?: string, maxTokens?: number): Promise<LLMResponse>;
 
   /**
    * Generates an embedding for the given text.
@@ -35,6 +36,26 @@ export type LLMModel =
   | 'gemini-2.5-flash-lite'
   | 'gemini-2.5-pro';
 
+/** Conservative per-model output token caps. Falls back to the passed-in value. */
+const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
+  // Anthropic
+  'claude-sonnet-4-5-20250929': 8192,
+  'claude-haiku-4-5-20251001': 4096,
+  'claude-opus-4-5-20251101': 8192,
+  'claude-opus-4-1-20250805': 8192,
+  // OpenAI
+  'gpt-5':       8192,
+  'gpt-5-pro':   8192,
+  'gpt-5-mini':  4096,
+  'gpt-5-nano':  4096,
+  'gpt-5.1':     8192,
+  // Google
+  'gemini-2.5-pro':        8192,
+  'gemini-2.5-flash':      8192,
+  'gemini-2.5-flash-lite': 4096,
+  'gemini-3-pro':          8192,
+};
+
 export class RealLLMService implements ILLMService {
   private getProviderFromModel(model: string): LLMProvider {
     if (model.startsWith('gpt-')) return 'openai';
@@ -43,7 +64,8 @@ export class RealLLMService implements ILLMService {
     throw new Error(`Unknown model provider for model: ${model}`);
   }
 
-  private async callOpenAI(prompt: string, systemPrompt: string = '', model: string): Promise<LLMResponse> {
+  private async callOpenAI(prompt: string, systemPrompt: string = '', model: string, maxTokens = 8192): Promise<LLMResponse> {
+    maxTokens = Math.min(maxTokens, MODEL_MAX_OUTPUT_TOKENS[model] ?? maxTokens);
     const apiKey = process.env.OPENAI_API_KEY;
     const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
     
@@ -65,12 +87,13 @@ export class RealLLMService implements ILLMService {
         model,
         messages,
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: maxTokens,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText} — ${errBody}`);
     }
 
     const data = await response.json() as any;
@@ -85,7 +108,8 @@ export class RealLLMService implements ILLMService {
     };
   }
 
-  private async callAnthropic(prompt: string, systemPrompt: string = '', model: string): Promise<LLMResponse> {
+  private async callAnthropic(prompt: string, systemPrompt: string = '', model: string, maxTokens = 8192): Promise<LLMResponse> {
+    maxTokens = Math.min(maxTokens, MODEL_MAX_OUTPUT_TOKENS[model] ?? maxTokens);
     const apiKey = process.env.ANTHROPIC_API_KEY;
     const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
     
@@ -102,14 +126,15 @@ export class RealLLMService implements ILLMService {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        max_tokens: maxTokens,
         messages,
         system: systemPrompt || undefined,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.status} ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Anthropic API error: ${response.status} ${response.statusText} — ${errBody}`);
     }
 
     const data = await response.json() as any;
@@ -124,7 +149,8 @@ export class RealLLMService implements ILLMService {
     };
   }
 
-  private async callGoogle(prompt: string, systemPrompt: string = '', model: string): Promise<LLMResponse> {
+  private async callGoogle(prompt: string, systemPrompt: string = '', model: string, maxTokens = 8192): Promise<LLMResponse> {
+    maxTokens = Math.min(maxTokens, MODEL_MAX_OUTPUT_TOKENS[model] ?? maxTokens);
     const apiKey = process.env.GOOGLE_API_KEY;
     const baseUrl = process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
     
@@ -144,13 +170,14 @@ export class RealLLMService implements ILLMService {
         }],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 2000,
+          maxOutputTokens: maxTokens,
         },
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Google API error: ${response.status} ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Google API error: ${response.status} ${response.statusText} — ${errBody}`);
     }
 
     const data = await response.json() as any;
@@ -169,7 +196,7 @@ export class RealLLMService implements ILLMService {
     };
   }
 
-  async generateCompletion(prompt: string, systemPrompt: string = '', model: string = 'claude-sonnet-4-5-20250929'): Promise<LLMResponse> {
+  async generateCompletion(prompt: string, systemPrompt: string = '', model: string = 'claude-sonnet-4-5-20250929', maxTokens = 8192): Promise<LLMResponse> {
     console.log(`[LLMService] Generating completion with model: ${model}`);
     
     const provider = this.getProviderFromModel(model);
@@ -181,11 +208,11 @@ export class RealLLMService implements ILLMService {
     try {
       switch (provider) {
         case 'openai':
-          return await this.callOpenAI(prompt, systemPrompt, model);
+          return await this.callOpenAI(prompt, systemPrompt, model, maxTokens);
         case 'anthropic':
-          return await this.callAnthropic(prompt, systemPrompt, model);
+          return await this.callAnthropic(prompt, systemPrompt, model, maxTokens);
         case 'google':
-          return await this.callGoogle(prompt, systemPrompt, model);
+          return await this.callGoogle(prompt, systemPrompt, model, maxTokens);
         default:
           throw new Error(`Unsupported provider: ${provider}`);
       }

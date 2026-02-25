@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Allow up to 2 minutes for LLM responses
+export const maxDuration = 120;
+
 const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://localhost:3003';
 
 export async function POST(request: NextRequest) {
