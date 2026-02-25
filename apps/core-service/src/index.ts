@@ -343,6 +343,34 @@ Stay focused on the core topic while being helpful and engaging. Build upon prev
     // 7. Save the updated memory to database
     const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
 
+    // 8. If compression just happened, fire background topic update
+    if (updatedMemory.lastSummaryAt === updatedMemory.messageCount) {
+      (async () => {
+        try {
+          const topicPrompt = `Based on this conversation summary, generate a concise topic title (5-10 words, no quotes, no punctuation at end):
+
+${updatedMemory.workingMemory}
+
+Topic:`;
+          const topicResponse = await llmService.generateCompletion(
+            topicPrompt,
+            'You are a topic title generator. Return only the title, nothing else.',
+            node.model
+          );
+          const newTopic = topicResponse.content.trim().replace(/^["']|["']$/g, '').slice(0, 120);
+          if (newTopic && newTopic !== node.topic) {
+            await prismaCore.node.update({
+              where: { id: nodeId },
+              data: { topic: newTopic },
+            });
+            console.log(`[TopicEvolution] Updated topic: "${node.topic}" → "${newTopic}"`);
+          }
+        } catch {
+          // Ignore — unique constraint violations or LLM errors are non-fatal
+        }
+      })();
+    }
+
     return reply.send({
       success: true,
       response: llmResponse.content,

@@ -1,9 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
 import Link from 'next/link';
 import { use } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Node, ChatMessage, User } from '../../../types/api';
+
+// Memoised markdown — only re-parses if content changes
+const MemoMarkdown = memo(function MemoMarkdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+  );
+});
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -40,18 +49,20 @@ function Avatar({ userId, isLlm }: { userId: string; isLlm: boolean }) {
   );
 }
 
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   message,
   currentUserId,
 }: {
   message: ChatMessage;
   currentUserId: string;
 }) {
+  // Stable time string — only recomputed if message changes
+  const time = useMemo(() =>
+    new Date(message.createdAt).toLocaleTimeString('en-AU', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }), [message.createdAt]);
   const isCurrentUser = !message.isLlm && message.userId === currentUserId;
-  const time = new Date(message.createdAt).toLocaleTimeString('en-AU', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 
   if (message.isLlm) {
     return (
@@ -62,8 +73,8 @@ function MessageBubble({
             <span className="text-xs font-semibold text-indigo-700">AI Assistant</span>
             <span className="text-xs text-gray-400">{time}</span>
           </div>
-          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-800 whitespace-pre-wrap max-w-2xl">
-            {message.content}
+          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-gray-800 max-w-2xl prose prose-sm prose-indigo">
+            <MemoMarkdown content={message.content} />
           </div>
         </div>
       </div>
@@ -106,7 +117,7 @@ function MessageBubble({
       </div>
     </div>
   );
-}
+});
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: nodeId } = use(params);
