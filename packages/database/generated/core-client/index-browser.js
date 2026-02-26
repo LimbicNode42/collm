@@ -145,7 +145,8 @@ exports.Prisma.MessageScalarFieldEnum = {
   userId: 'userId',
   nodeId: 'nodeId',
   targetNodeVersion: 'targetNodeVersion',
-  status: 'status'
+  status: 'status',
+  nodeStateBefore: 'nodeStateBefore'
 };
 
 exports.Prisma.SortOrder = {

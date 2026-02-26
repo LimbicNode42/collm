@@ -47,4 +47,7 @@ model Message {
   targetNodeVersion Int
 
   status    String   @default("PENDING")
+
+  // Snapshot of nodeState BEFORE this contribution was applied — enables version diffs
+  nodeStateBefore   String?  @db.Text
 }

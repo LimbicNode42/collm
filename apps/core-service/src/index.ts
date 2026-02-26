@@ -302,6 +302,7 @@ fastify.get('/nodes/:id/messages', async (request, reply) => {
         isLlm: m.userId === 'llm',
         status: m.status,
         createdAt: m.createdAt.toISOString(),
+        nodeStateBefore: m.nodeStateBefore ?? null,
       }))
     });
   } catch (error) {
@@ -755,7 +756,7 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
       .replace(/\s*```$/, '')
       .trim();
 
-    // Persist contribution as a message (contribution log)
+    // Persist contribution as a message — save the BEFORE snapshot for diffing
     await prismaCore.message.create({
       data: {
         content: contribution,
@@ -763,6 +764,7 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
         nodeId: id,
         targetNodeVersion: dbNode.version,
         status: MessageStatus.ACCEPTED,
+        nodeStateBefore: currentState || null,
       },
     });
 

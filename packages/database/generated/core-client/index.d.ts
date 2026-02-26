@@ -2069,6 +2069,7 @@ export namespace Prisma {
     nodeId: string | null
     targetNodeVersion: number | null
     status: string | null
+    nodeStateBefore: string | null
   }
 
   export type MessageMaxAggregateOutputType = {
@@ -2079,6 +2080,7 @@ export namespace Prisma {
     nodeId: string | null
     targetNodeVersion: number | null
     status: string | null
+    nodeStateBefore: string | null
   }
 
   export type MessageCountAggregateOutputType = {
@@ -2089,6 +2091,7 @@ export namespace Prisma {
     nodeId: number
     targetNodeVersion: number
     status: number
+    nodeStateBefore: number
     _all: number
   }
 
@@ -2109,6 +2112,7 @@ export namespace Prisma {
     nodeId?: true
     targetNodeVersion?: true
     status?: true
+    nodeStateBefore?: true
   }
 
   export type MessageMaxAggregateInputType = {
@@ -2119,6 +2123,7 @@ export namespace Prisma {
     nodeId?: true
     targetNodeVersion?: true
     status?: true
+    nodeStateBefore?: true
   }
 
   export type MessageCountAggregateInputType = {
@@ -2129,6 +2134,7 @@ export namespace Prisma {
     nodeId?: true
     targetNodeVersion?: true
     status?: true
+    nodeStateBefore?: true
     _all?: true
   }
 
@@ -2226,6 +2232,7 @@ export namespace Prisma {
     nodeId: string
     targetNodeVersion: number
     status: string
+    nodeStateBefore: string | null
     _count: MessageCountAggregateOutputType | null
     _avg: MessageAvgAggregateOutputType | null
     _sum: MessageSumAggregateOutputType | null
@@ -2255,6 +2262,7 @@ export namespace Prisma {
     nodeId?: boolean
     targetNodeVersion?: boolean
     status?: boolean
+    nodeStateBefore?: boolean
     node?: boolean | NodeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["message"]>
 
@@ -2266,6 +2274,7 @@ export namespace Prisma {
     nodeId?: boolean
     targetNodeVersion?: boolean
     status?: boolean
+    nodeStateBefore?: boolean
     node?: boolean | NodeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["message"]>
 
@@ -2277,6 +2286,7 @@ export namespace Prisma {
     nodeId?: boolean
     targetNodeVersion?: boolean
     status?: boolean
+    nodeStateBefore?: boolean
   }
 
   export type MessageInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2299,6 +2309,7 @@ export namespace Prisma {
       nodeId: string
       targetNodeVersion: number
       status: string
+      nodeStateBefore: string | null
     }, ExtArgs["result"]["message"]>
     composites: {}
   }
@@ -2700,6 +2711,7 @@ export namespace Prisma {
     readonly nodeId: FieldRef<"Message", 'String'>
     readonly targetNodeVersion: FieldRef<"Message", 'Int'>
     readonly status: FieldRef<"Message", 'String'>
+    readonly nodeStateBefore: FieldRef<"Message", 'String'>
   }
     
 
@@ -3072,7 +3084,8 @@ export namespace Prisma {
     userId: 'userId',
     nodeId: 'nodeId',
     targetNodeVersion: 'targetNodeVersion',
-    status: 'status'
+    status: 'status',
+    nodeStateBefore: 'nodeStateBefore'
   };
 
   export type MessageScalarFieldEnum = (typeof MessageScalarFieldEnum)[keyof typeof MessageScalarFieldEnum]
@@ -3288,6 +3301,7 @@ export namespace Prisma {
     nodeId?: StringFilter<"Message"> | string
     targetNodeVersion?: IntFilter<"Message"> | number
     status?: StringFilter<"Message"> | string
+    nodeStateBefore?: StringNullableFilter<"Message"> | string | null
     node?: XOR<NodeRelationFilter, NodeWhereInput>
   }
 
@@ -3299,6 +3313,7 @@ export namespace Prisma {
     nodeId?: SortOrder
     targetNodeVersion?: SortOrder
     status?: SortOrder
+    nodeStateBefore?: SortOrderInput | SortOrder
     node?: NodeOrderByWithRelationInput
   }
 
@@ -3313,6 +3328,7 @@ export namespace Prisma {
     nodeId?: StringFilter<"Message"> | string
     targetNodeVersion?: IntFilter<"Message"> | number
     status?: StringFilter<"Message"> | string
+    nodeStateBefore?: StringNullableFilter<"Message"> | string | null
     node?: XOR<NodeRelationFilter, NodeWhereInput>
   }, "id">
 
@@ -3324,6 +3340,7 @@ export namespace Prisma {
     nodeId?: SortOrder
     targetNodeVersion?: SortOrder
     status?: SortOrder
+    nodeStateBefore?: SortOrderInput | SortOrder
     _count?: MessageCountOrderByAggregateInput
     _avg?: MessageAvgOrderByAggregateInput
     _max?: MessageMaxOrderByAggregateInput
@@ -3342,6 +3359,7 @@ export namespace Prisma {
     nodeId?: StringWithAggregatesFilter<"Message"> | string
     targetNodeVersion?: IntWithAggregatesFilter<"Message"> | number
     status?: StringWithAggregatesFilter<"Message"> | string
+    nodeStateBefore?: StringNullableWithAggregatesFilter<"Message"> | string | null
   }
 
   export type NodeCreateInput = {
@@ -3467,6 +3485,7 @@ export namespace Prisma {
     userId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
     node: NodeCreateNestedOneWithoutMessagesInput
   }
 
@@ -3478,6 +3497,7 @@ export namespace Prisma {
     nodeId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
   }
 
   export type MessageUpdateInput = {
@@ -3487,6 +3507,7 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
     node?: NodeUpdateOneRequiredWithoutMessagesNestedInput
   }
 
@@ -3498,6 +3519,7 @@ export namespace Prisma {
     nodeId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageCreateManyInput = {
@@ -3508,6 +3530,7 @@ export namespace Prisma {
     nodeId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
   }
 
   export type MessageUpdateManyMutationInput = {
@@ -3517,6 +3540,7 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageUncheckedUpdateManyInput = {
@@ -3527,6 +3551,7 @@ export namespace Prisma {
     nodeId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type StringFilter<$PrismaModel = never> = {
@@ -3747,6 +3772,7 @@ export namespace Prisma {
     nodeId?: SortOrder
     targetNodeVersion?: SortOrder
     status?: SortOrder
+    nodeStateBefore?: SortOrder
   }
 
   export type MessageAvgOrderByAggregateInput = {
@@ -3761,6 +3787,7 @@ export namespace Prisma {
     nodeId?: SortOrder
     targetNodeVersion?: SortOrder
     status?: SortOrder
+    nodeStateBefore?: SortOrder
   }
 
   export type MessageMinOrderByAggregateInput = {
@@ -3771,6 +3798,7 @@ export namespace Prisma {
     nodeId?: SortOrder
     targetNodeVersion?: SortOrder
     status?: SortOrder
+    nodeStateBefore?: SortOrder
   }
 
   export type MessageSumOrderByAggregateInput = {
@@ -4005,6 +4033,7 @@ export namespace Prisma {
     userId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
   }
 
   export type MessageUncheckedCreateWithoutNodeInput = {
@@ -4014,6 +4043,7 @@ export namespace Prisma {
     userId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
   }
 
   export type MessageCreateOrConnectWithoutNodeInput = {
@@ -4053,6 +4083,7 @@ export namespace Prisma {
     nodeId?: StringFilter<"Message"> | string
     targetNodeVersion?: IntFilter<"Message"> | number
     status?: StringFilter<"Message"> | string
+    nodeStateBefore?: StringNullableFilter<"Message"> | string | null
   }
 
   export type NodeCreateWithoutMessagesInput = {
@@ -4142,6 +4173,7 @@ export namespace Prisma {
     userId: string
     targetNodeVersion: number
     status?: string
+    nodeStateBefore?: string | null
   }
 
   export type MessageUpdateWithoutNodeInput = {
@@ -4151,6 +4183,7 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageUncheckedUpdateWithoutNodeInput = {
@@ -4160,6 +4193,7 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type MessageUncheckedUpdateManyWithoutNodeInput = {
@@ -4169,6 +4203,7 @@ export namespace Prisma {
     userId?: StringFieldUpdateOperationsInput | string
     targetNodeVersion?: IntFieldUpdateOperationsInput | number
     status?: StringFieldUpdateOperationsInput | string
+    nodeStateBefore?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
 

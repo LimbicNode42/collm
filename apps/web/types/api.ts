@@ -34,6 +34,8 @@ export interface Contribution {
   content: string;
   userId: string;
   createdAt: string;
+  /** Snapshot of nodeState before this contribution was applied. null = first contribution. */
+  nodeStateBefore: string | null;
 }
 
 export enum MessageStatus {
