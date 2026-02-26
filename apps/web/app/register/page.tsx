@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -15,8 +16,7 @@ export default function Register() {
     setError('');
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${apiUrl}/register`, {
+      const res = await fetch(`/api/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -93,6 +93,13 @@ export default function Register() {
               Sign up
             </button>
           </div>
+
+          <p className="text-center text-sm text-gray-600">
+            Already have an account?{' '}
+            <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Sign in
+            </Link>
+          </p>
         </form>
       </div>
     </div>

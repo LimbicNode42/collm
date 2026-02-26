@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Node, User } from '../../types/api';
 
@@ -40,11 +41,17 @@ export default function NodesPage() {
   const [description, setDescription] = useState('');
   const [model, setModel] = useState(MODELS[0]);
 
+  const router = useRouter();
+
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
-    loadNodes();
-  }, []);
+    if (stored) {
+      setUser(JSON.parse(stored));
+      loadNodes();
+    } else {
+      router.replace('/login');
+    }
+  }, [router]);
 
   async function loadNodes() {
     setLoading(true);

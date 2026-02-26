@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { use } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -132,6 +133,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [lastPollAt, setLastPollAt] = useState<Date | null>(null);
   const [contextWarnings, setContextWarnings] = useState<string[]>([]);
 
+  const router = useRouter();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const knownIdsRef = useRef<Set<string>>(new Set());
@@ -187,13 +190,17 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
+    if (!stored) {
+      router.replace('/login');
+      return;
+    }
+    setUser(JSON.parse(stored));
     loadNode();
     pollMessages();
 
     const interval = setInterval(pollMessages, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [nodeId, pollMessages]);
+  }, [nodeId, pollMessages, router]);
 
   // Auto-grow textarea
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {

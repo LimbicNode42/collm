@@ -17,6 +17,7 @@ const MODELS = [
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [question, setQuestion] = useState('');
   const [model, setModel] = useState(MODELS[0]);
   const [loading, setLoading] = useState(false);
@@ -26,14 +27,20 @@ export default function Home() {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
-    inputRef.current?.focus();
-  }, []);
+    if (stored) {
+      setUser(JSON.parse(stored));
+      setAuthChecked(true);
+      inputRef.current?.focus();
+    } else {
+      // No user — redirect to login
+      router.replace('/login');
+    }
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setUser(null);
+    router.replace('/login');
   };
 
   async function handleAsk(e: React.FormEvent) {
@@ -60,7 +67,6 @@ export default function Home() {
       const data = await res.json();
 
       if (data.existingNode) {
-        // Brief flash of "found a match" before redirecting
         setMatchInfo({ topic: data.topic, similarity: data.similarity });
         await new Promise(r => setTimeout(r, 800));
       }
@@ -79,38 +85,39 @@ export default function Home() {
     }
   }
 
+  // Don't render anything until auth check is done (avoids flash)
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex flex-col">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-6 py-4">
+      {/* Top bar — relative + z-10 so it always sits above the form */}
+      <header className="relative z-10 flex items-center justify-between px-6 py-4">
         <span className="font-bold text-indigo-700 text-lg tracking-tight">Collm</span>
         <div className="flex items-center gap-3">
-          {user ? (
-            <>
-              <span className="text-sm text-gray-500">{user.name || user.email}</span>
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-500 hover:text-gray-700 underline"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900">Login</Link>
-              <Link
-                href="/register"
-                className="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Register
-              </Link>
-            </>
-          )}
+          <span className="text-sm text-gray-500">{user?.name || user?.email}</span>
+          <Link
+            href="/nodes"
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            Conversations
+          </Link>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Logout
+          </button>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-4 -mt-16">
+      <main className="flex-1 flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-2xl space-y-8">
           {/* Heading */}
           <div className="text-center space-y-2">

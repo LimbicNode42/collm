@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -14,8 +15,7 @@ export default function Login() {
     setError('');
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${apiUrl}/login`, {
+      const res = await fetch(`/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,6 +82,13 @@ export default function Login() {
               Sign in
             </button>
           </div>
+
+          <p className="text-center text-sm text-gray-600">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Register
+            </Link>
+          </p>
         </form>
       </div>
     </div>
