@@ -272,7 +272,9 @@ fastify.get('/nodes/:id', async (request, reply) => {
     if (!node) {
       return reply.code(404).send({ error: 'Node not found' });
     }
-    return reply.send({ success: true, node });
+    // Also return nodeState (the evolving knowledge document)
+    const dbRaw = await prismaCore.node.findUnique({ where: { id } });
+    return reply.send({ ...node, nodeState: dbRaw?.nodeState || '' });
   } catch (error) {
     request.log.error(error);
     return reply.code(500).send({ error: 'Internal Server Error' });
@@ -335,7 +337,7 @@ fastify.post('/llm/test', async (request, reply) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    request.log.error('LLM test error:', error);
+    request.log.error({ err: error }, 'LLM test error');
     return reply.code(500).send({ 
       error: 'Failed to generate LLM response',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -640,6 +642,145 @@ Return only valid JSON, nothing else.`;
 //     }
 //   }
 // }
+
+// ---------------------------------------------------------------------------
+// Evolving document helpers
+// ---------------------------------------------------------------------------
+const EVOLVE_SECTION_THRESHOLD = 50_000; // chars — above this we use section-based updates
+const MAX_CONTRIBUTION_CHARS   = 20_000;
+
+function parseMarkdownSections(doc: string): Array<{ heading: string; content: string }> {
+  const parts = doc.split(/(?=^## )/m);
+  return parts
+    .map(part => {
+      const nl = part.indexOf('\n');
+      const heading = nl === -1 ? part.replace(/^## /, '') : part.slice(0, nl).replace(/^## /, '');
+      const content = nl === -1 ? '' : part.slice(nl + 1).trimEnd();
+      return { heading: heading.trim() || 'Preamble', content };
+    })
+    .filter(s => s.heading !== 'Preamble' || s.content);
+}
+
+function scoreSectionRelevance(section: { heading: string; content: string }, contribution: string): number {
+  const contribWords = new Set(
+    contribution.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+  );
+  const text = `${section.heading} ${section.content}`.toLowerCase();
+  return text.split(/\W+/).filter(w => w.length > 3 && contribWords.has(w)).length;
+}
+
+async function evolveLargeDocument(
+  topic: string,
+  model: string,
+  currentState: string,
+  contribution: string
+): Promise<string> {
+  const sections = parseMarkdownSections(currentState);
+  const scored   = sections
+    .map(s => ({ ...s, score: scoreSectionRelevance(s, contribution) }))
+    .sort((a, b) => b.score - a.score);
+
+  const topSections    = scored.slice(0, 4);
+  const documentMap    = sections.map(s => `- ${s.heading}`).join('\n');
+  const relevantBlocks = topSections.map(s => `## ${s.heading}\n${s.content}`).join('\n\n');
+
+  const systemPrompt = `You maintain sections of a large knowledge document about "${topic}". Update ONLY the provided sections to integrate the contribution. Return ONLY the updated sections, each starting with "## Heading".`;
+  const prompt = `DOCUMENT STRUCTURE:\n${documentMap}\n\nRELEVANT SECTIONS:\n${relevantBlocks}\n\nNEW CONTRIBUTION:\n${contribution}\n\nReturn updated sections only (## Heading format):`;
+
+  const response = await llmService.generateCompletion(prompt, systemPrompt, model, 3000);
+  const updatedSections = parseMarkdownSections(response.content.trim());
+
+  let result = currentState;
+  for (const updated of updatedSections) {
+    const original = sections.find(
+      s => s.heading.toLowerCase() === updated.heading.toLowerCase()
+    );
+    if (original) {
+      result = result.replace(
+        `## ${original.heading}\n${original.content}`,
+        `## ${updated.heading}\n${updated.content}`
+      );
+    }
+  }
+  return result;
+}
+
+// POST /nodes/:id/evolve — integrate a contribution into the evolving document
+fastify.post('/nodes/:id/evolve', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { contribution, userId = 'anonymous', userName } = request.body as {
+    contribution: string;
+    userId?: string;
+    userName?: string;
+  };
+
+  if (!contribution?.trim()) {
+    return reply.code(400).send({ error: 'Contribution is required' });
+  }
+
+  try {
+    const dbNode = await prismaCore.node.findUnique({ where: { id } });
+    if (!dbNode) return reply.code(404).send({ error: 'Node not found' });
+
+    const safeContribution = contribution.length > MAX_CONTRIBUTION_CHARS
+      ? contribution.slice(0, MAX_CONTRIBUTION_CHARS) + '\n\n[Truncated to fit input limit]'
+      : contribution;
+
+    const currentState = dbNode.nodeState || '';
+    let updatedState: string;
+
+    // 2048 tokens keeps responses under ~30s, well within connection timeouts
+    const EVOLVE_MAX_TOKENS = 2048;
+
+    if (!currentState) {
+      // First contribution — bootstrap document
+      const systemPrompt = `You are creating a concise knowledge document. Based on the topic and initial contribution, produce a well-structured document in markdown with clear ## sections. Encyclopedic, accurate, neutral tone. Be concise — 400-600 words maximum.`;
+      const prompt = `TOPIC: ${dbNode.topic}\n${dbNode.description ? `DESCRIPTION: ${dbNode.description}\n` : ''}\nINITIAL CONTRIBUTION:\n${safeContribution}\n\nDocument:`;
+      const r = await llmService.generateCompletion(prompt, systemPrompt, dbNode.model, EVOLVE_MAX_TOKENS);
+      updatedState = r.content.trim();
+    } else if (currentState.length < EVOLVE_SECTION_THRESHOLD) {
+      // Full-document evolution
+      const systemPrompt = `You maintain a knowledge document about "${dbNode.topic}". Integrate the contribution naturally — expand detail, resolve contradictions, improve clarity. Return the COMPLETE updated document in markdown. Keep it under 600 words unless the topic demands more.`;
+      const prompt = `CURRENT DOCUMENT:\n${currentState}\n\n---\nNEW CONTRIBUTION:\n${safeContribution}\n\nReturn the complete updated document:`;
+      const r = await llmService.generateCompletion(prompt, systemPrompt, dbNode.model, EVOLVE_MAX_TOKENS);
+      updatedState = r.content.trim();
+    } else {
+      // Section-based evolution for large documents
+      updatedState = await evolveLargeDocument(dbNode.topic, dbNode.model, currentState, safeContribution);
+    }
+
+    // Strip accidental markdown fences
+    updatedState = updatedState
+      .replace(/^```(?:markdown)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim();
+
+    // Persist contribution as a message (contribution log)
+    await prismaCore.message.create({
+      data: {
+        content: contribution,
+        userId: userName || userId,
+        nodeId: id,
+        targetNodeVersion: dbNode.version,
+        status: MessageStatus.ACCEPTED,
+      },
+    });
+
+    // Save updated state + bump version
+    const updated = await prismaCore.node.update({
+      where: { id },
+      data: { nodeState: updatedState, version: { increment: 1 } },
+    });
+
+    return reply.send({ success: true, nodeState: updatedState, version: updated.version });
+  } catch (error) {
+    request.log.error({ err: error }, 'Evolve error');
+    return reply.code(500).send({
+      error: 'Failed to evolve document',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
 
 const start = async () => {
   try {

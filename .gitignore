@@ -43,3 +43,7 @@ next-env.d.ts
 .terraform
 .terraform.lock.hcl
 local.tfvars
+
+# Windows reserved device name accidentally created at repo root
+nul
+NUL

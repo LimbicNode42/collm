@@ -991,6 +991,7 @@ export namespace Prisma {
     workingMemory: string | null
     messageCount: number | null
     lastSummaryAt: number | null
+    nodeState: string | null
     model: string | null
     version: number | null
     createdAt: Date | null
@@ -1005,6 +1006,7 @@ export namespace Prisma {
     workingMemory: string | null
     messageCount: number | null
     lastSummaryAt: number | null
+    nodeState: string | null
     model: string | null
     version: number | null
     createdAt: Date | null
@@ -1020,6 +1022,7 @@ export namespace Prisma {
     keyFacts: number
     messageCount: number
     lastSummaryAt: number
+    nodeState: number
     model: number
     version: number
     createdAt: number
@@ -1048,6 +1051,7 @@ export namespace Prisma {
     workingMemory?: true
     messageCount?: true
     lastSummaryAt?: true
+    nodeState?: true
     model?: true
     version?: true
     createdAt?: true
@@ -1062,6 +1066,7 @@ export namespace Prisma {
     workingMemory?: true
     messageCount?: true
     lastSummaryAt?: true
+    nodeState?: true
     model?: true
     version?: true
     createdAt?: true
@@ -1077,6 +1082,7 @@ export namespace Prisma {
     keyFacts?: true
     messageCount?: true
     lastSummaryAt?: true
+    nodeState?: true
     model?: true
     version?: true
     createdAt?: true
@@ -1179,6 +1185,7 @@ export namespace Prisma {
     keyFacts: JsonValue[]
     messageCount: number
     lastSummaryAt: number
+    nodeState: string
     model: string
     version: number
     createdAt: Date
@@ -1213,6 +1220,7 @@ export namespace Prisma {
     keyFacts?: boolean
     messageCount?: boolean
     lastSummaryAt?: boolean
+    nodeState?: boolean
     model?: boolean
     version?: boolean
     createdAt?: boolean
@@ -1230,6 +1238,7 @@ export namespace Prisma {
     keyFacts?: boolean
     messageCount?: boolean
     lastSummaryAt?: boolean
+    nodeState?: boolean
     model?: boolean
     version?: boolean
     createdAt?: boolean
@@ -1245,6 +1254,7 @@ export namespace Prisma {
     keyFacts?: boolean
     messageCount?: boolean
     lastSummaryAt?: boolean
+    nodeState?: boolean
     model?: boolean
     version?: boolean
     createdAt?: boolean
@@ -1271,6 +1281,7 @@ export namespace Prisma {
       keyFacts: Prisma.JsonValue[]
       messageCount: number
       lastSummaryAt: number
+      nodeState: string
       model: string
       version: number
       createdAt: Date
@@ -1677,6 +1688,7 @@ export namespace Prisma {
     readonly keyFacts: FieldRef<"Node", 'Json[]'>
     readonly messageCount: FieldRef<"Node", 'Int'>
     readonly lastSummaryAt: FieldRef<"Node", 'Int'>
+    readonly nodeState: FieldRef<"Node", 'String'>
     readonly model: FieldRef<"Node", 'String'>
     readonly version: FieldRef<"Node", 'Int'>
     readonly createdAt: FieldRef<"Node", 'DateTime'>
@@ -3043,6 +3055,7 @@ export namespace Prisma {
     keyFacts: 'keyFacts',
     messageCount: 'messageCount',
     lastSummaryAt: 'lastSummaryAt',
+    nodeState: 'nodeState',
     model: 'model',
     version: 'version',
     createdAt: 'createdAt',
@@ -3179,6 +3192,7 @@ export namespace Prisma {
     keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntFilter<"Node"> | number
     lastSummaryAt?: IntFilter<"Node"> | number
+    nodeState?: StringFilter<"Node"> | string
     model?: StringFilter<"Node"> | string
     version?: IntFilter<"Node"> | number
     createdAt?: DateTimeFilter<"Node"> | Date | string
@@ -3195,6 +3209,7 @@ export namespace Prisma {
     keyFacts?: SortOrder
     messageCount?: SortOrder
     lastSummaryAt?: SortOrder
+    nodeState?: SortOrder
     model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
@@ -3214,6 +3229,7 @@ export namespace Prisma {
     keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntFilter<"Node"> | number
     lastSummaryAt?: IntFilter<"Node"> | number
+    nodeState?: StringFilter<"Node"> | string
     model?: StringFilter<"Node"> | string
     version?: IntFilter<"Node"> | number
     createdAt?: DateTimeFilter<"Node"> | Date | string
@@ -3230,6 +3246,7 @@ export namespace Prisma {
     keyFacts?: SortOrder
     messageCount?: SortOrder
     lastSummaryAt?: SortOrder
+    nodeState?: SortOrder
     model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
@@ -3253,6 +3270,7 @@ export namespace Prisma {
     keyFacts?: JsonNullableListFilter<"Node">
     messageCount?: IntWithAggregatesFilter<"Node"> | number
     lastSummaryAt?: IntWithAggregatesFilter<"Node"> | number
+    nodeState?: StringWithAggregatesFilter<"Node"> | string
     model?: StringWithAggregatesFilter<"Node"> | string
     version?: IntWithAggregatesFilter<"Node"> | number
     createdAt?: DateTimeWithAggregatesFilter<"Node"> | Date | string
@@ -3335,6 +3353,7 @@ export namespace Prisma {
     keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
+    nodeState?: string
     model?: string
     version?: number
     createdAt?: Date | string
@@ -3351,6 +3370,7 @@ export namespace Prisma {
     keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
+    nodeState?: string
     model?: string
     version?: number
     createdAt?: Date | string
@@ -3367,6 +3387,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3383,6 +3404,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3399,6 +3421,7 @@ export namespace Prisma {
     keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
+    nodeState?: string
     model?: string
     version?: number
     createdAt?: Date | string
@@ -3414,6 +3437,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3429,6 +3453,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -3594,6 +3619,7 @@ export namespace Prisma {
     keyFacts?: SortOrder
     messageCount?: SortOrder
     lastSummaryAt?: SortOrder
+    nodeState?: SortOrder
     model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
@@ -3614,6 +3640,7 @@ export namespace Prisma {
     workingMemory?: SortOrder
     messageCount?: SortOrder
     lastSummaryAt?: SortOrder
+    nodeState?: SortOrder
     model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
@@ -3628,6 +3655,7 @@ export namespace Prisma {
     workingMemory?: SortOrder
     messageCount?: SortOrder
     lastSummaryAt?: SortOrder
+    nodeState?: SortOrder
     model?: SortOrder
     version?: SortOrder
     createdAt?: SortOrder
@@ -4036,6 +4064,7 @@ export namespace Prisma {
     keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
+    nodeState?: string
     model?: string
     version?: number
     createdAt?: Date | string
@@ -4051,6 +4080,7 @@ export namespace Prisma {
     keyFacts?: NodeCreatekeyFactsInput | InputJsonValue[]
     messageCount?: number
     lastSummaryAt?: number
+    nodeState?: string
     model?: string
     version?: number
     createdAt?: Date | string
@@ -4082,6 +4112,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -4097,6 +4128,7 @@ export namespace Prisma {
     keyFacts?: NodeUpdatekeyFactsInput | InputJsonValue[]
     messageCount?: IntFieldUpdateOperationsInput | number
     lastSummaryAt?: IntFieldUpdateOperationsInput | number
+    nodeState?: StringFieldUpdateOperationsInput | string
     model?: StringFieldUpdateOperationsInput | string
     version?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string

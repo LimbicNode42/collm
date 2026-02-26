@@ -22,6 +22,9 @@ model Node {
   messageCount      Int      @default(0)
   lastSummaryAt     Int      @default(0)  // Message count when last summarized
   
+  // The evolving knowledge document — the primary output of the node
+  nodeState         String   @default("") @db.Text
+
   embedding   Unsupported("vector(384)")?
   model       String   @default("claude-sonnet-4-5-20250929")
   version     Int      @default(1)

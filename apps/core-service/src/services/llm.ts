@@ -196,30 +196,67 @@ export class RealLLMService implements ILLMService {
     };
   }
 
-  async generateCompletion(prompt: string, systemPrompt: string = '', model: string = 'claude-sonnet-4-5-20250929', maxTokens = 8192): Promise<LLMResponse> {
-    console.log(`[LLMService] Generating completion with model: ${model}`);
-    
-    const provider = this.getProviderFromModel(model);
+  /** Returns true for transient network errors that are worth retrying */
+  private isRetryableError(error: unknown): boolean {
+    if (error instanceof TypeError && error.message.includes('fetch failed')) return true;
+    if (error instanceof Error) {
+      const cause = (error as any).cause;
+      if (cause?.code === 'UND_ERR_SOCKET')  return true;
+      if (cause?.code === 'ECONNRESET')       return true;
+      if (cause?.code === 'ETIMEDOUT')        return true;
+      if (cause?.code === 'ECONNREFUSED')     return true;
+    }
+    return false;
+  }
 
+  async generateCompletion(
+    prompt: string,
+    systemPrompt: string = '',
+    model: string = 'claude-sonnet-4-5-20250929',
+    maxTokens = 8192
+  ): Promise<LLMResponse> {
+    console.log(`[LLMService] Generating completion with model: ${model}`);
+
+    const provider = this.getProviderFromModel(model);
     console.debug(`[LLMService] Using provider: ${provider} for model: ${model}`);
     console.debug(`[LLMService] System Prompt: "${systemPrompt.substring(0, 50)}..."`);
     console.debug(`[LLMService] Prompt: "${prompt.substring(0, 50)}..."`);
-    
-    try {
-      switch (provider) {
-        case 'openai':
-          return await this.callOpenAI(prompt, systemPrompt, model, maxTokens);
-        case 'anthropic':
-          return await this.callAnthropic(prompt, systemPrompt, model, maxTokens);
-        case 'google':
-          return await this.callGoogle(prompt, systemPrompt, model, maxTokens);
-        default:
-          throw new Error(`Unsupported provider: ${provider}`);
+
+    const MAX_RETRIES = 2;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delayMs = Math.pow(2, attempt - 1) * 1500; // 1.5s, 3s
+        console.warn(`[LLMService] Transient error — retrying in ${delayMs}ms (attempt ${attempt}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
-    } catch (error) {
-      console.error(`[LLMService] Error generating completion:`, error);
-      throw error;
+
+      try {
+        switch (provider) {
+          case 'openai':
+            return await this.callOpenAI(prompt, systemPrompt, model, maxTokens);
+          case 'anthropic':
+            return await this.callAnthropic(prompt, systemPrompt, model, maxTokens);
+          case 'google':
+            return await this.callGoogle(prompt, systemPrompt, model, maxTokens);
+          default:
+            throw new Error(`Unsupported provider: ${provider}`);
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < MAX_RETRIES && this.isRetryableError(error)) {
+          console.warn(`[LLMService] Retryable error on attempt ${attempt}:`, error);
+          continue;
+        }
+        // Non-retryable or exhausted retries
+        console.error(`[LLMService] Error generating completion:`, error);
+        throw error;
+      }
     }
+
+    // Should never reach here, but satisfies TypeScript
+    throw lastError;
   }
 
   async generateEmbedding(text: string): Promise<number[]> {

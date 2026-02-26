@@ -23,9 +23,17 @@ export interface Node {
   description?: string | null;
   model: string;
   memory: NodeMemory;
+  nodeState: string;   // The evolving knowledge document (markdown)
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Contribution {
+  id: string;
+  content: string;
+  userId: string;
+  createdAt: string;
 }
 
 export enum MessageStatus {

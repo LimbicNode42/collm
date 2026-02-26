@@ -131,6 +131,7 @@ exports.Prisma.NodeScalarFieldEnum = {
   keyFacts: 'keyFacts',
   messageCount: 'messageCount',
   lastSummaryAt: 'lastSummaryAt',
+  nodeState: 'nodeState',
   model: 'model',
   version: 'version',
   createdAt: 'createdAt',
