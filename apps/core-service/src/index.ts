@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -405,14 +405,22 @@ async function evolveLargeDocument(topic: string, model: string, currentState: s
 // POST /nodes/:id/evolve
 fastify.post('/nodes/:id/evolve', async (request, reply) => {
   const { id } = request.params as { id: string };
-  const { contribution, userId = 'anonymous', userName, sourceUrl } = request.body as {
-    contribution: string; userId?: string; userName?: string; sourceUrl?: string;
+  const { contribution, userId = 'anonymous', userName, sourceUrl, defer } = request.body as {
+    contribution: string; userId?: string; userName?: string; sourceUrl?: string; defer?: boolean;
   };
   if (!contribution?.trim()) return reply.code(400).send({ error: 'Contribution is required' });
 
   try {
     const dbNode = await prismaCore.node.findUnique({ where: { id } });
     if (!dbNode) return reply.code(404).send({ error: 'Node not found' });
+
+    // Deferred mode: store as PENDING without synthesizing immediately
+    if (defer) {
+      await prismaCore.message.create({
+        data: { content: contribution, userId: userName || userId, nodeId: id, targetNodeVersion: dbNode.version, status: MessageStatus.PENDING, nodeStateBefore: dbNode.nodeState || null, sourceUrl: sourceUrl || null }
+      });
+      return reply.code(202).send({ deferred: true, message: 'Contribution queued for review' });
+    }
 
     const safeContribution = contribution.length > MAX_CONTRIBUTION_CHARS
       ? contribution.slice(0, MAX_CONTRIBUTION_CHARS) + '\n\n[Truncated]'
@@ -456,6 +464,113 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
     request.log.error({ err: error }, 'Evolve error');
     return reply.code(500).send({ error: 'Failed to evolve document', details: error instanceof Error ? error.message : 'Unknown error' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Item 10: Presence — in-memory viewer tracking (30-second TTL)
+// ---------------------------------------------------------------------------
+const presenceStore = new Map<string, Map<string, number>>(); // nodeId → userId → timestamp
+const PRESENCE_TTL_MS = 30_000;
+
+fastify.post('/nodes/:id/presence', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { userId } = request.body as { userId: string };
+  if (!id || !userId) return reply.code(400).send({ error: 'id and userId required' });
+  if (!presenceStore.has(id)) presenceStore.set(id, new Map());
+  presenceStore.get(id)!.set(userId, Date.now());
+  const now = Date.now();
+  const viewers = Array.from(presenceStore.get(id)!.entries())
+    .filter(([, ts]) => now - ts < PRESENCE_TTL_MS)
+    .map(([uid]) => uid);
+  return reply.send({ viewers });
+});
+
+// ---------------------------------------------------------------------------
+// Item 9: Related nodes — embedding cosine similarity
+// ---------------------------------------------------------------------------
+fastify.get('/nodes/:id/related', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  try {
+    const { embeddingService } = await import('./services/embedding');
+    await embeddingService.initialize();
+    const [node, allNodes] = await Promise.all([
+      prismaCore.node.findUnique({ where: { id }, select: { topic: true } }),
+      prismaCore.node.findMany({ where: { id: { not: id } }, select: { id: true, topic: true, description: true, tags: true } })
+    ]);
+    if (!node) return reply.code(404).send({ error: 'Node not found' });
+    const targetEmb = await embeddingService.embed(node.topic);
+    const scored = await Promise.all(allNodes.map(async (n) => {
+      const emb = await embeddingService.embed(n.topic);
+      return { ...n, score: embeddingService.cosineSimilarity(targetEmb, emb) };
+    }));
+    const related = scored.sort((a, b) => b.score - a.score).slice(0, 5).filter(n => n.score > 0.35);
+    return reply.send({ related });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Related nodes failed', details: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Item 7: Moderation queue — list and batch-synthesize pending contributions
+// ---------------------------------------------------------------------------
+fastify.get('/nodes/:id/pending', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const pending = await prismaCore.message.findMany({
+    where: { nodeId: id, status: MessageStatus.PENDING },
+    orderBy: { createdAt: 'asc' }
+  });
+  return reply.send({ pending: pending.map(m => ({ id: m.id, content: m.content, userId: m.userId, createdAt: m.createdAt.toISOString(), sourceUrl: m.sourceUrl ?? null })) });
+});
+
+fastify.post('/nodes/:id/pending/synthesize', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const node = await prismaCore.node.findUnique({ where: { id } });
+  if (!node) return reply.code(404).send({ error: 'Node not found' });
+  const pending = await prismaCore.message.findMany({ where: { nodeId: id, status: MessageStatus.PENDING }, orderBy: { createdAt: 'asc' } });
+  if (pending.length === 0) return reply.send({ message: 'No pending contributions', nodeState: node.nodeState });
+  const combined = pending.map((m, i) => `[Contribution ${i + 1} by ${m.userId}]\n${m.content}`).join('\n\n---\n\n');
+  const systemPrompt = `You maintain a knowledge document about "${node.topic}" in encyclopedic style. Integrate all contributions, resolve contradictions, stay neutral.`;
+  const prompt = `CURRENT DOCUMENT:\n${node.nodeState || '(empty)'}\n\n---\nPENDING CONTRIBUTIONS:\n${combined}\n\nReturn the complete updated document in markdown:`;
+  try {
+    const r = await llmService.generateCompletion(prompt, systemPrompt, node.model, 2048);
+    const updatedState = r.content.trim().replace(/^```(?:markdown)?\s*/i, '').replace(/\s*```$/, '').trim();
+    await Promise.all([
+      prismaCore.message.updateMany({ where: { nodeId: id, status: MessageStatus.PENDING }, data: { status: MessageStatus.ACCEPTED } }),
+      prismaCore.node.update({ where: { id }, data: { nodeState: updatedState, version: { increment: 1 } } })
+    ]);
+    return reply.send({ success: true, nodeState: updatedState, synthesized: pending.length });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Synthesis failed', details: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Item 8: Milestones — named snapshots with restore
+// ---------------------------------------------------------------------------
+fastify.post('/nodes/:id/milestones', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { name } = request.body as { name?: string };
+  const node = await prismaCore.node.findUnique({ where: { id } });
+  if (!node) return reply.code(404).send({ error: 'Node not found' });
+  if (!node.nodeState) return reply.code(400).send({ error: 'No document content to snapshot' });
+  const milestone = await (prismaCore as any).milestone.create({
+    data: { name: name?.trim() || `v${node.version} – ${new Date().toLocaleDateString()}`, nodeId: id, nodeState: node.nodeState, version: node.version }
+  });
+  return reply.code(201).send({ id: milestone.id, name: milestone.name, version: milestone.version, createdAt: milestone.createdAt.toISOString() });
+});
+
+fastify.get('/nodes/:id/milestones', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const milestones = await (prismaCore as any).milestone.findMany({ where: { nodeId: id }, orderBy: { createdAt: 'desc' } });
+  return reply.send({ milestones: milestones.map((m: any) => ({ id: m.id, name: m.name, version: m.version, createdAt: m.createdAt.toISOString() })) });
+});
+
+fastify.post('/nodes/:id/milestones/:milestoneId/restore', async (request, reply) => {
+  const { id, milestoneId } = request.params as { id: string; milestoneId: string };
+  const milestone = await (prismaCore as any).milestone.findFirst({ where: { id: milestoneId, nodeId: id } });
+  if (!milestone) return reply.code(404).send({ error: 'Milestone not found' });
+  const updated = await prismaCore.node.update({ where: { id }, data: { nodeState: milestone.nodeState, version: { increment: 1 } } });
+  return reply.send({ success: true, nodeState: milestone.nodeState, version: updated.version });
 });
 
 const start = async () => {
