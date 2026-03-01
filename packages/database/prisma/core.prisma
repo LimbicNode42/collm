@@ -14,13 +14,14 @@ model Node {
   id          String   @id @default(cuid())
   topic       String   @unique
   description String?
+  tags        String[] @default([])
   
   // Structured memory fields replacing simple 'state'
-  coreContext       String   @db.Text  // The essential topic/conversation essence - never decays
-  workingMemory     String   @db.Text  // Recent compressed state
-  keyFacts          Json[]   // Structured facts with confidence and metadata
+  coreContext       String   @db.Text
+  workingMemory     String   @db.Text
+  keyFacts          Json[]
   messageCount      Int      @default(0)
-  lastSummaryAt     Int      @default(0)  // Message count when last summarized
+  lastSummaryAt     Int      @default(0)
   
   // The evolving knowledge document — the primary output of the node
   nodeState         String   @default("") @db.Text
@@ -39,15 +40,28 @@ model Message {
   createdAt DateTime @default(now())
   
   userId    String
-  // User relation removed as it's in a different DB. We just store the ID.
-  
   nodeId    String
   node      Node     @relation(fields: [nodeId], references: [id])
   
   targetNodeVersion Int
-
   status    String   @default("PENDING")
 
   // Snapshot of nodeState BEFORE this contribution was applied — enables version diffs
   nodeStateBefore   String?  @db.Text
+
+  // Optional source URL the contributor referenced
+  sourceUrl         String?  @db.Text
+
+  votes     Vote[]
+}
+
+model Vote {
+  id         String   @id @default(cuid())
+  userId     String
+  messageId  String
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  value      Int      // +1 upvote, -1 downvote
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, messageId])
 }

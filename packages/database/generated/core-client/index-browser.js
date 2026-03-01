@@ -126,6 +126,7 @@ exports.Prisma.NodeScalarFieldEnum = {
   id: 'id',
   topic: 'topic',
   description: 'description',
+  tags: 'tags',
   coreContext: 'coreContext',
   workingMemory: 'workingMemory',
   keyFacts: 'keyFacts',
@@ -146,7 +147,16 @@ exports.Prisma.MessageScalarFieldEnum = {
   nodeId: 'nodeId',
   targetNodeVersion: 'targetNodeVersion',
   status: 'status',
-  nodeStateBefore: 'nodeStateBefore'
+  nodeStateBefore: 'nodeStateBefore',
+  sourceUrl: 'sourceUrl'
+};
+
+exports.Prisma.VoteScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  messageId: 'messageId',
+  value: 'value',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -167,7 +177,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   Node: 'Node',
-  Message: 'Message'
+  Message: 'Message',
+  Vote: 'Vote'
 };
 
 /**

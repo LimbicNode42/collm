@@ -1,5 +1,4 @@
 // Client-side type definitions for the web app
-// These represent the shape of data received from API calls
 
 export interface User {
   id: string;
@@ -22,8 +21,9 @@ export interface Node {
   topic: string;
   description?: string | null;
   model: string;
+  tags: string[];
   memory: NodeMemory;
-  nodeState: string;   // The evolving knowledge document (markdown)
+  nodeState: string;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -34,8 +34,10 @@ export interface Contribution {
   content: string;
   userId: string;
   createdAt: string;
-  /** Snapshot of nodeState before this contribution was applied. null = first contribution. */
   nodeStateBefore: string | null;
+  sourceUrl: string | null;
+  upvotes: number;
+  downvotes: number;
 }
 
 export enum MessageStatus {
@@ -49,13 +51,12 @@ export enum MessageStatus {
 export interface ChatMessage {
   id: string;
   content: string;
-  userId: string;        // 'llm' for AI responses, email/id for users
+  userId: string;
   isLlm: boolean;
   status: string;
   createdAt: string;
 }
 
-/** Legacy shape — kept for backward compat with test page */
 export interface Message {
   id: string;
   content: string;

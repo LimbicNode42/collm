@@ -98,6 +98,22 @@ function SplitDiff({ chunks, leftRef, rightRef, onScrollLeft, onScrollRight }: {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers: tags, TOC, impact score
+// ---------------------------------------------------------------------------
+const TAG_COLORS = ['bg-indigo-100 text-indigo-700','bg-purple-100 text-purple-700','bg-teal-100 text-teal-700','bg-amber-100 text-amber-700','bg-rose-100 text-rose-700','bg-blue-100 text-blue-700','bg-green-100 text-green-700'];
+function tagColor(tag: string) { let h = 0; for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) % TAG_COLORS.length; return TAG_COLORS[h]; }
+function extractTOC(md: string): Array<{level:number;text:string;id:string}> {
+  return md.split('\n').filter(l => /^#{1,3} /.test(l)).map(l => { const m = l.match(/^(#{1,3}) (.+)/); if (!m) return null; const text = m[2].trim(); return {level:m[1].length,text,id:text.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')}; }).filter(Boolean) as Array<{level:number;text:string;id:string}>;
+}
+function computeImpact(before: string, after: string): number {
+  if (!after) return 0;
+  const changes = diffLines(before||'', after||'');
+  const changed = changes.filter(c=>c.added||c.removed).reduce((s,c)=>s+(c.count??1),0);
+  const total = changes.reduce((s,c)=>s+(c.count??1),0);
+  return total > 0 ? Math.round((changed/total)*100) : 0;
+}
+
+// ---------------------------------------------------------------------------
 // Expandable contribution list item (4 lines at a time)
 // ---------------------------------------------------------------------------
 function ContributionListItem({ c, onOpen }: { c: Contribution; onOpen: () => void }) {
@@ -282,6 +298,26 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedContribution, setSelectedContribution] = useState<Contribution | null>(null);
 
+  // Extra panels + form fields
+  const [showFactBrowser, setShowFactBrowser] = useState(false);
+  const [showTOC, setShowTOC] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [userVotes, setUserVotes] = useState<Record<string, number>>({});
+
+  async function voteContribution(messageId: string, value: number) {
+    if (!userId) return;
+    const current = userVotes[messageId] ?? 0;
+    const next = current === value ? 0 : value; // toggle off if clicking same
+    setUserVotes(prev => ({ ...prev, [messageId]: next }));
+    try {
+      await fetch(`/api/nodes/${nodeId}/messages/${messageId}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, value: next }),
+      });
+    } catch { /* non-fatal */ }
+  }
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const displayName = user?.name || user?.email || 'anonymous';
@@ -314,6 +350,9 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           userId: m.userId,
           createdAt: m.createdAt,
           nodeStateBefore: m.nodeStateBefore ?? null,
+          sourceUrl: m.sourceUrl ?? null,
+          upvotes: m.upvotes ?? 0,
+          downvotes: m.downvotes ?? 0,
         }));
       setContributions(userContribs);
     } catch {
@@ -348,6 +387,7 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   function closePanel() {
     setPanelOpen(false);
     setContribution('');
+    setSourceUrl('');
     setEvolveError('');
   }
 
@@ -367,6 +407,7 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           contribution: text,
           userId,
           userName: displayName,
+          sourceUrl: sourceUrl.trim() || undefined,
         }),
       });
 
@@ -422,18 +463,22 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {node?.nodeState && extractTOC(node.nodeState).length > 0 && (
+              <button onClick={() => setShowTOC(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
+                Contents
+              </button>
+            )}
+            {(node?.memory?.keyFacts?.length ?? 0) > 0 && (
+              <button onClick={() => setShowFactBrowser(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
+                {node?.memory?.keyFacts?.length} facts
+              </button>
+            )}
             {contributions.length > 0 && (
-              <button
-                onClick={() => setShowHistory(v => !v)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
+              <button onClick={() => setShowHistory(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
                 {contributions.length} contribution{contributions.length !== 1 ? 's' : ''}
               </button>
             )}
-            <button
-              onClick={openPanel}
-              className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-            >
+            <button onClick={openPanel} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
               + Contribute
             </button>
           </div>
@@ -478,8 +523,16 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
               </ReactMarkdown>
             </article>
 
+            {/* Tags */}
+            {(node.tags ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-8 mb-4">
+                {(node.tags ?? []).map(tag => (
+                  <span key={tag} className={`px-2 py-0.5 rounded-full text-xs font-medium ${tagColor(tag)}`}>{tag}</span>
+                ))}
+              </div>
+            )}
             {/* Footer meta */}
-            <div className="mt-12 pt-6 border-t border-gray-100 flex flex-wrap items-center gap-4 text-xs text-gray-400">
+            <div className="mt-6 pt-6 border-t border-gray-100 flex flex-wrap items-center gap-4 text-xs text-gray-400">
               <span>Version {node.version}</span>
               <span>Last updated {timeAgo(node.updatedAt)}</span>
               {node.description && <span className="italic">{node.description}</span>}
@@ -554,6 +607,57 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* ── Diff modal ─────────────────────────────────────────────────── */}
+      {showTOC && node?.nodeState && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowTOC(false)} />
+          <aside className="fixed top-0 left-0 h-full w-72 bg-white border-r shadow-2xl z-40 flex flex-col">
+            <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-800">Contents</h2>
+              <button onClick={() => setShowTOC(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+            <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+              {extractTOC(node.nodeState).map((entry, i) => (
+                <a key={i} href={`#${entry.id}`} onClick={() => setShowTOC(false)}
+                  className={`block px-3 py-1.5 rounded-lg text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors truncate ${entry.level === 1 ? 'font-semibold' : entry.level === 2 ? 'pl-5' : 'pl-8 text-xs text-gray-500'}`}>
+                  {entry.text}
+                </a>
+              ))}
+            </nav>
+          </aside>
+        </>
+      )}
+
+      {showFactBrowser && node && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowFactBrowser(false)} />
+          <aside className="fixed top-0 right-0 h-full w-80 bg-white border-l shadow-2xl z-40 flex flex-col">
+            <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-800">Key Facts <span className="text-gray-400 font-normal">({node.memory?.keyFacts?.length ?? 0})</span></h2>
+              <button onClick={() => setShowFactBrowser(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+            <ul className="flex-1 overflow-y-auto divide-y">
+              {(node.memory?.keyFacts ?? []).map((fact: any, i: number) => {
+                const content = typeof fact === 'string' ? fact : (fact.content ?? '');
+                const confidence = typeof fact === 'object' ? (fact.confidence ?? null) : null;
+                return (
+                  <li key={i} className="px-4 py-3">
+                    <p className="text-xs text-gray-700 leading-relaxed">{content}</p>
+                    {confidence !== null && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                          <div className="bg-indigo-400 h-1.5 rounded-full" style={{width:`${Math.round(confidence*100)}%`}} />
+                        </div>
+                        <span className="text-xs text-gray-400">{Math.round(confidence*100)}%</span>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        </>
+      )}
+
       {selectedContribution && node && (() => {
         const chronIdx = contributions.findIndex(c => c.id === selectedContribution.id);
         const nextContrib = contributions[chronIdx + 1];
@@ -604,6 +708,15 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 rows={5}
                 disabled={evolving}
                 className="w-full border rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 resize-none placeholder:text-gray-400"
+              />
+
+              <input
+                type="url"
+                value={sourceUrl}
+                onChange={e => setSourceUrl(e.target.value)}
+                placeholder="Source URL (optional) — e.g. https://example.com/study"
+                disabled={evolving}
+                className="w-full border rounded-xl px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 placeholder:text-gray-400"
               />
 
               {evolveError && (
