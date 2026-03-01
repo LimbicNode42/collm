@@ -55,6 +55,15 @@ model Message {
   votes Vote[]
 }
 
+model Milestone {
+  id        String   @id @default(cuid())
+  name      String
+  nodeId    String
+  nodeState String
+  version   Int
+  createdAt DateTime @default(now())
+}
+
 model Vote {
   id        String   @id @default(cuid())
   userId    String

@@ -151,6 +151,15 @@ exports.Prisma.MessageScalarFieldEnum = {
   sourceUrl: 'sourceUrl'
 };
 
+exports.Prisma.MilestoneScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  nodeId: 'nodeId',
+  nodeState: 'nodeState',
+  version: 'version',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.VoteScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -178,6 +187,7 @@ exports.Prisma.NullsOrder = {
 exports.Prisma.ModelName = {
   Node: 'Node',
   Message: 'Message',
+  Milestone: 'Milestone',
   Vote: 'Vote'
 };
 

@@ -1,1 +1,0 @@
-const fs=require("fs");const c=fs.readFileSync("d:/HobbyProjects/collm/script_content.txt","utf8");fs.writeFileSync("d:/HobbyProjects/collm/transform.py",c);console.log("done");
