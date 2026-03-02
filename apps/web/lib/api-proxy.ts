@@ -16,7 +16,7 @@ const SERVICES: ServiceConfig[] = [
   {
     name: 'core-service',
     baseUrl: process.env.CORE_SERVICE_URL || 'http://localhost:3003',
-    pathPatterns: ['/nodes', '/llm', '/health', '/adjudication']
+    pathPatterns: ['/nodes', '/llm', '/health', '/adjudication', '/leaderboard']
   },
   {
     name: 'message-service', 

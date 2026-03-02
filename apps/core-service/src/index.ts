@@ -405,8 +405,8 @@ async function evolveLargeDocument(topic: string, model: string, currentState: s
 // POST /nodes/:id/evolve
 fastify.post('/nodes/:id/evolve', async (request, reply) => {
   const { id } = request.params as { id: string };
-  const { contribution, userId = 'anonymous', userName, sourceUrl, defer } = request.body as {
-    contribution: string; userId?: string; userName?: string; sourceUrl?: string; defer?: boolean;
+  const { contribution, userId = 'anonymous', userName, sourceUrl, defer, generateDiagrams } = request.body as {
+    contribution: string; userId?: string; userName?: string; sourceUrl?: string; defer?: boolean; generateDiagrams?: boolean;
   };
   if (!contribution?.trim()) return reply.code(400).send({ error: 'Contribution is required' });
 
@@ -436,7 +436,7 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
       const r = await llmService.generateCompletion(prompt, systemPrompt, dbNode.model, EVOLVE_MAX_TOKENS);
       updatedState = r.content.trim();
     } else if (currentState.length < EVOLVE_SECTION_THRESHOLD) {
-      const systemPrompt = `You maintain a knowledge document about "${dbNode.topic}" in the style of Wikipedia or StackExchange. Integrate the contribution naturally — expand detail, resolve contradictions, improve clarity.\n\nGuidelines:\n- Prefer quantitative data over vague claims: replace or supplement general statements with specific numbers, percentages, figures, or dates from the contribution\n- Cite sources inline using [Source: Author/Publication, Year] when the contributor provides them\n- Neutral, encyclopedic tone — present multiple perspectives for contested claims\n- Return the COMPLETE updated document in markdown\n- Keep it under 600 words unless the topic genuinely demands more depth`;
+      const systemPrompt = `You maintain a knowledge document about "${dbNode.topic}" in the style of Wikipedia or StackExchange. Integrate the contribution naturally — expand detail, resolve contradictions, improve clarity.\n\nGuidelines:\n- Prefer quantitative data over vague claims: replace or supplement general statements with specific numbers, percentages, figures, or dates from the contribution\n- Cite sources inline using [Source: Author/Publication, Year] when the contributor provides them\n- Neutral, encyclopedic tone — present multiple perspectives for contested claims\n- Return the COMPLETE updated document in markdown\n- Keep it under 600 words unless the topic genuinely demands more depth${generateDiagrams ? '\n- Where relevant, include Mermaid.js diagrams using ```mermaid blocks for processes, architectures, or relationships\n- For statistical data, include structured data in ```chart blocks as JSON: {"type":"bar"|"line"|"pie","labels":[...],"datasets":[{"label":"...","data":[...]}]}' : ''}`;
       const prompt = `CURRENT DOCUMENT:\n${currentState}\n\n---\nNEW CONTRIBUTION:\n${safeContribution}\n\nReturn the complete updated document:`;
       const r = await llmService.generateCompletion(prompt, systemPrompt, dbNode.model, EVOLVE_MAX_TOKENS);
       updatedState = r.content.trim();
@@ -459,6 +459,8 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
       data: { nodeState: updatedState, version: { increment: 1 } },
     });
 
+    // Fire-and-forget quality scoring (non-blocking)
+    scoreDocumentQuality(id, updatedState, dbNode.topic, dbNode.model).catch(() => {});
     return reply.send({ success: true, nodeState: updatedState, version: updated.version });
   } catch (error) {
     request.log.error({ err: error }, 'Evolve error');
@@ -572,6 +574,107 @@ fastify.post('/nodes/:id/milestones/:milestoneId/restore', async (request, reply
   const updated = await prismaCore.node.update({ where: { id }, data: { nodeState: milestone.nodeState, version: { increment: 1 } } });
   return reply.send({ success: true, nodeState: milestone.nodeState, version: updated.version });
 });
+
+// ---------------------------------------------------------------------------
+// Feature: Contributor Reputation Leaderboard
+// ---------------------------------------------------------------------------
+fastify.get('/leaderboard', async (_request, reply) => {
+  const messages = await prismaCore.message.findMany({
+    where: { status: MessageStatus.ACCEPTED, NOT: { userId: 'llm' } },
+    include: { votes: true }
+  });
+  
+  const userStats = new Map<string, { contributionCount: number; netVotes: number; totalUpvotes: number; totalDownvotes: number; totalImpact: number }>();
+  
+  for (const msg of messages) {
+    const stats = userStats.get(msg.userId) ?? { contributionCount: 0, netVotes: 0, totalUpvotes: 0, totalDownvotes: 0, totalImpact: 0 };
+    const upvotes = msg.votes.filter(v => v.value === 1).length;
+    const downvotes = msg.votes.filter(v => v.value === -1).length;
+    const impact = msg.nodeStateBefore != null ? Math.abs(msg.content.length) : 0;
+    userStats.set(msg.userId, {
+      contributionCount: stats.contributionCount + 1,
+      netVotes: stats.netVotes + upvotes - downvotes,
+      totalUpvotes: stats.totalUpvotes + upvotes,
+      totalDownvotes: stats.totalDownvotes + downvotes,
+      totalImpact: stats.totalImpact + impact
+    });
+  }
+  
+  const leaderboard = Array.from(userStats.entries())
+    .map(([userId, stats]) => ({ userId, ...stats }))
+    .sort((a, b) => b.netVotes - a.netVotes || b.contributionCount - a.contributionCount);
+  
+  return reply.send({ leaderboard });
+});
+
+
+// ---------------------------------------------------------------------------
+// Feature: Multi-document synthesis
+// ---------------------------------------------------------------------------
+fastify.post('/nodes/synthesize-multiple', async (request, reply) => {
+  const { nodeIds, topic, description, model } = request.body as { nodeIds: string[]; topic: string; description?: string; model?: string };
+  if (!nodeIds || nodeIds.length < 2) return reply.code(400).send({ error: 'At least 2 nodeIds required' });
+  if (!topic?.trim()) return reply.code(400).send({ error: 'topic is required' });
+  
+  const nodes = await prismaCore.node.findMany({ where: { id: { in: nodeIds } }, select: { id: true, topic: true, nodeState: true } });
+  if (nodes.length < 2) return reply.code(404).send({ error: 'Could not find the specified nodes' });
+  
+  const combinedContent = nodes.map(n => `## ${n.topic}\n\n${n.nodeState || '(no content)'}`).join('\n\n---\n\n');
+  const systemPrompt = `You are creating a new encyclopedic knowledge document by synthesizing content from multiple related documents. Merge the content intelligently, remove redundancy, resolve contradictions, and produce a coherent unified document in markdown.`;
+  const prompt = `SYNTHESIS TOPIC: ${topic}\n${description ? `DESCRIPTION: ${description}\n` : ''}\nSOURCE DOCUMENTS:\n${combinedContent}\n\nCreate a unified synthesis document:`;
+  
+  try {
+    const r = await llmService.generateCompletion(prompt, systemPrompt, model || 'claude-sonnet-4-5-20250929', 3000);
+    const synthesizedState = r.content.trim().replace(/^```(?:markdown)?\s*/i, '').replace(/\s*```$/, '').trim();
+    
+    const newNode = await prismaCore.node.create({
+      data: {
+        topic,
+        description: description || `Synthesis of: ${nodes.map(n => n.topic).join(', ')}`,
+        model: model || 'claude-sonnet-4-5-20250929',
+        coreContext: `Topic: ${topic}\nSynthesis of: ${nodes.map(n => n.topic).join(', ')}`,
+        workingMemory: `Synthesized from ${nodes.length} documents`,
+        keyFacts: [],
+        nodeState: synthesizedState,
+        version: 1
+      }
+    });
+    
+    return reply.code(201).send({ node: { id: newNode.id, topic: newNode.topic, nodeState: synthesizedState, version: 1 } });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Synthesis failed', details: String(error) });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Feature: Document Quality Scoring
+// ---------------------------------------------------------------------------
+async function scoreDocumentQuality(nodeId: string, nodeState: string, topic: string, model: string): Promise<void> {
+  if (!nodeState || nodeState.length < 100) return;
+  const prompt = `Rate this knowledge document about "${topic}" on 4 dimensions (0-10 each). Return ONLY valid JSON, no markdown.\n\nDOCUMENT:\n${nodeState.slice(0, 3000)}\n\nReturn exactly:\n{"accuracy": <0-10>, "completeness": <0-10>, "neutrality": <0-10>, "citations": <0-10>}`;
+  
+  try {
+    const r = await llmService.generateCompletion(prompt, 'You are a document quality evaluator. Return only valid JSON with 4 integer scores.', model, 100);
+    const cleaned = r.content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const scores = JSON.parse(cleaned);
+    const overall = Math.round((scores.accuracy + scores.completeness + scores.neutrality + scores.citations) / 4);
+    await prismaCore.node.update({
+      where: { id: nodeId },
+      data: { qualityScore: { ...scores, overall, scoredAt: new Date().toISOString() } }
+    });
+  } catch { /* non-fatal */ }
+}
+
+fastify.post('/nodes/:id/quality-score', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const node = await prismaCore.node.findUnique({ where: { id } });
+  if (!node) return reply.code(404).send({ error: 'Node not found' });
+  if (!node.nodeState) return reply.code(400).send({ error: 'No document content to score' });
+  scoreDocumentQuality(id, node.nodeState, node.topic, node.model); // fire-and-forget
+  return reply.send({ message: 'Quality scoring started' });
+});
+
 
 const start = async () => {
   try {

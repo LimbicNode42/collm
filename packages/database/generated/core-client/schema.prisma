@@ -26,12 +26,13 @@ model Node {
   // The evolving knowledge document — the primary output of the node
   nodeState String @default("") @db.Text
 
-  embedding Unsupported("vector(384)")?
-  model     String                      @default("claude-sonnet-4-5-20250929")
-  version   Int                         @default(1)
-  createdAt DateTime                    @default(now())
-  updatedAt DateTime                    @updatedAt
-  messages  Message[]
+  embedding    Unsupported("vector(384)")?
+  model        String                      @default("claude-sonnet-4-5-20250929")
+  version      Int                         @default(1)
+  qualityScore Json?
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+  messages     Message[]
 }
 
 model Message {

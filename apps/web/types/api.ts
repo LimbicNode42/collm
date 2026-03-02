@@ -25,6 +25,14 @@ export interface Node {
   memory: NodeMemory;
   nodeState: string;
   version: number;
+  qualityScore?: {
+    accuracy: number;
+    completeness: number;
+    neutrality: number;
+    citations: number;
+    overall: number;
+    scoredAt?: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

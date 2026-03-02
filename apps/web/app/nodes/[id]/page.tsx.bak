@@ -6,24 +6,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { diffLines } from 'diff';
-import mermaid from 'mermaid';
 import { Node, Contribution, User } from '../../../types/api';
-
-// ---------------------------------------------------------------------------
-// Mermaid diagram renderer
-// ---------------------------------------------------------------------------
-function MermaidDiagram({ code }: { code: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
-    const id = `mermaid-${Math.random().toString(36).slice(2)}`;
-    mermaid.render(id, code).then(({ svg }) => {
-      if (ref.current) ref.current.innerHTML = svg;
-    }).catch(console.error);
-  }, [code]);
-  return <div ref={ref} className="my-4 flex justify-center overflow-x-auto" />;
-}
 
 // ---------------------------------------------------------------------------
 // Diff utilities — chunk-based with markdown rendering
@@ -130,44 +113,10 @@ function computeImpact(before: string, after: string): number {
   return total > 0 ? Math.round((changed/total)*100) : 0;
 }
 
-function detectContested(contributions: Contribution[]): Set<string> {
-  const contested = new Set<string>();
-  const addedLines: Map<string, Set<string>> = new Map();
-  for (let i = 0; i < contributions.length; i++) {
-    const c = contributions[i];
-    const before = c.nodeStateBefore ?? '';
-    const nextC = contributions[i + 1];
-    if (!nextC) continue;
-    const after = nextC.nodeStateBefore ?? '';
-    const changes = diffLines(before, after);
-    const added = new Set(changes.filter(c => c.added).map(c => c.value.trim()).filter(Boolean));
-    addedLines.set(c.id, added);
-  }
-  for (const [id, added] of addedLines.entries()) {
-    if (added.size === 0) continue;
-    const idxA = contributions.findIndex(c => c.id === id);
-    for (let j = idxA + 1; j < contributions.length; j++) {
-      const laterC = contributions[j];
-      const laterBefore = laterC.nodeStateBefore ?? '';
-      const laterNext = contributions[j + 1];
-      if (!laterNext) continue;
-      const laterAfter = laterNext.nodeStateBefore ?? '';
-      const laterChanges = diffLines(laterBefore, laterAfter);
-      const laterRemoved = new Set(laterChanges.filter(c => c.removed).map(c => c.value.trim()).filter(Boolean));
-      const overlap = [...added].filter(line => laterRemoved.has(line)).length;
-      if (overlap > 0 && overlap / added.size >= 0.3) {
-        contested.add(id);
-        contested.add(laterC.id);
-      }
-    }
-  }
-  return contested;
-}
-
 // ---------------------------------------------------------------------------
 // Expandable contribution list item (4 lines at a time)
 // ---------------------------------------------------------------------------
-function ContributionListItem({ c, afterState, onOpen, contested }: { c: Contribution; afterState?: string; onOpen: () => void; contested?: boolean }) {
+function ContributionListItem({ c, afterState, onOpen }: { c: Contribution; afterState?: string; onOpen: () => void }) {
   const [lines, setLines] = useState(4);
   const [hasMore, setHasMore] = useState(false);
   const contentRef = useRef<HTMLParagraphElement>(null);
@@ -203,7 +152,6 @@ function ContributionListItem({ c, afterState, onOpen, contested }: { c: Contrib
               {score > 0 ? `+${score}` : score}
             </span>
           )}
-          {contested && <span className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 bg-orange-100 text-orange-700"> Disputed</span>}
         </div>
         <p
           ref={contentRef}
@@ -321,15 +269,6 @@ function DiffModal({ contribution, afterState, onClose }: DiffModalProps) {
   );
 }
 
-const TEMPLATES = [
-  { label: '📊 Add statistic', text: 'According to [source], [statistic]. This data shows that ' },
-  { label: '✏️ Correct error', text: 'Correction: The statement "[incorrect claim]" is inaccurate. The correct information is: ' },
-  { label: '📚 Add case study', text: 'Case study: [organization/person] demonstrates this by [description]. The outcome was ' },
-  { label: '🔗 Add source', text: 'Source: [URL or publication]. This source states that ' },
-  { label: '💡 Add example', text: 'For example, [specific example]. This illustrates ' },
-  { label: '🔄 Update info', text: 'Update: As of [date], [updated information]. Previously, ' },
-];
-
 const POLL_INTERVAL_MS = 60_000; // Documents update infrequently — poll every 60s
 
 function ModelBadge({ model }: { model: string }) {
@@ -380,13 +319,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [showTOC, setShowTOC] = useState(false);
   const [sourceUrl, setSourceUrl] = useState('');
   const [userVotes, setUserVotes] = useState<Record<string, number>>({});
-  const [showMilestones, setShowMilestones] = useState(false);
-  const [milestones, setMilestones] = useState<any[]>([]);
-  const [pendingContribs, setPendingContribs] = useState<any[]>([]);
-  const [relatedNodes, setRelatedNodes] = useState<any[]>([]);
-  const [viewers, setViewers] = useState<string[]>([]);
-  const [deferContrib, setDeferContrib] = useState(false);
-  const [scoringQuality, setScoringQuality] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const displayName = user?.name || user?.email || 'anonymous';
@@ -414,11 +346,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
       const data = await res.json();
       // The core service returns the node at the top level (not nested)
       setNode(data);
-      // Fetch related nodes
-      try {
-        const relRes = await fetch(`/api/nodes/${nodeId}/related`);
-        if (relRes.ok) { const relData = await relRes.json(); setRelatedNodes(relData.related ?? relData ?? []); }
-      } catch { /* non-fatal */ }
     } catch {
       setLoadError('Could not load this topic. Is the core-service running?');
     }
@@ -443,16 +370,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           downvotes: m.downvotes ?? 0,
         }));
       setContributions(userContribs);
-      // Load pending contributions
-      try {
-        const pRes = await fetch(`/api/nodes/${nodeId}/pending`);
-        if (pRes.ok) { const pData = await pRes.json(); setPendingContribs(pData.pending ?? pData ?? []); }
-      } catch { /* non-fatal */ }
-      // Load milestones
-      try {
-        const mRes = await fetch(`/api/nodes/${nodeId}/milestones`);
-        if (mRes.ok) { const mData = await mRes.json(); setMilestones(mData.milestones ?? mData ?? []); }
-      } catch { /* non-fatal */ }
     } catch {
       // non-fatal
     }
@@ -474,24 +391,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [nodeId, loadNode, loadContributions, router]);
-
-  // Presence polling: POST every 15s
-  useEffect(() => {
-    if (!userId || userId === 'anonymous') return;
-    const postPresence = async () => {
-      try {
-        const res = await fetch(`/api/nodes/${nodeId}/presence`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId }),
-        });
-        if (res.ok) { const d = await res.json(); setViewers((d.viewers ?? []).filter((v: string) => v !== userId)); }
-      } catch { /* non-fatal */ }
-    };
-    postPresence();
-    const presenceInterval = setInterval(postPresence, 15_000);
-    return () => clearInterval(presenceInterval);
-  }, [nodeId, userId]);
 
   // Open contribute panel
   function openPanel() {
@@ -524,7 +423,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           userId,
           userName: displayName,
           sourceUrl: sourceUrl.trim() || undefined,
-          defer: deferContrib,
         }),
       });
 
@@ -573,11 +471,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 <h1 className="font-bold text-gray-900 truncate">{node.topic}</h1>
                 <ModelBadge model={node.model} />
                 <span className="text-xs text-gray-400 hidden sm:block">v{node.version}</span>
-                {node.qualityScore && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${node.qualityScore.overall >= 8 ? 'bg-green-100 text-green-800' : node.qualityScore.overall >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
-                    ⭐ {node.qualityScore.overall.toFixed(1)}/10
-                  </span>
-                )}
               </>
             ) : (
               <div className="h-5 w-48 bg-gray-200 rounded animate-pulse" />
@@ -600,38 +493,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 {contributions.length} contribution{contributions.length !== 1 ? 's' : ''}
               </button>
             )}
-           {viewers.length > 0 && (
-              <div className="flex items-center gap-1 mr-1">
-                {viewers.slice(0, 5).map((v, i) => (
-                  <div key={i} title={v} className="w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: `hsl(${v.charCodeAt(0) * 37 % 360}, 60%, 50%)` }}>
-                    {v[0]?.toUpperCase()}
-                  </div>
-                ))}
-              </div>
-            )}
-            {node?.nodeState && (
-              <button onClick={() => { const n = window.prompt('Milestone name'); if (n) { fetch(`/api/nodes/${nodeId}/milestones`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n }) }).then(r => { if (r.ok) loadContributions(); }); } }} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-                Save milestone
-              </button>
-            )}
-            <button onClick={() => setShowMilestones(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-              Milestones
-            </button>
-            <button
-              onClick={async () => {
-                if (scoringQuality) return;
-                setScoringQuality(true);
-                try {
-                  await fetch(`/api/nodes/${nodeId}/quality-score`, { method: 'POST' });
-                  setTimeout(() => { loadNode(); setScoringQuality(false); }, 3000);
-                } catch { setScoringQuality(false); }
-              }}
-              disabled={scoringQuality}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 hidden sm:block"
-            >
-              {scoringQuality ? 'Scoring…' : '⭐ Score quality'}
-            </button>
             <button onClick={openPanel} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
               + Contribute
             </button>
@@ -672,15 +533,7 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           // Document
           <>
             <article className="prose prose-gray prose-headings:font-bold prose-a:text-indigo-600 max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                code({ node: _n, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  const lang = match?.[1];
-                  const code = String(children).replace(/\n$/, '');
-                  if (lang === 'mermaid') return <MermaidDiagram code={code} />;
-                  return <code className={className} {...props}>{children}</code>;
-                }
-              }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {node.nodeState}
               </ReactMarkdown>
             </article>
@@ -700,25 +553,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
               {node.description && <span className="italic">{node.description}</span>}
             </div>
           </>
-        )}
-
-        {/* Related Topics */}
-        {relatedNodes.length > 0 && (
-          <div className="mt-10 pt-6 border-t border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-600 mb-3">Related Topics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {relatedNodes.slice(0, 5).map((rn: any) => (
-                <a key={rn.id} href={`/nodes/${rn.id}`} className="block p-3 border border-gray-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
-                  <p className="font-medium text-sm text-gray-800 truncate">{rn.topic}</p>
-                  {typeof rn.similarity === "number" && (
-                    <p className="text-xs text-indigo-500 mt-0.5">
-                      {Math.round(rn.similarity * 100)}% match
-                    </p>
-                  )}
-                </a>
-              ))}
-            </div>
-          </div>
         )}
 
       </main>
@@ -753,22 +587,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 className="w-full text-xs text-gray-900 border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400 bg-white"
               />
             </div>
-            {/* Pending Queue */}
-            {pendingContribs.length > 0 && (
-              <div className="border-b px-4 py-3 bg-amber-50">
-                <h3 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Pending Queue</h3>
-                <ul className="space-y-2">
-                  {pendingContribs.map((pc: any) => (
-                    <li key={pc.id} className="flex items-center justify-between gap-2 text-xs text-amber-900">
-                      <span className="truncate">{pc.userId}: {pc.content?.slice(0, 40)}...</span>
-                      <button onClick={() => fetch(`/api/nodes/${nodeId}/pending/synthesize`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pc.id }) }).then(() => loadContributions())} className="flex-shrink-0 text-xs bg-amber-600 text-white px-2 py-0.5 rounded hover:bg-amber-700">
-                        Synthesize now
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {/* List */}
             {(() => {
               const q = searchQuery.trim().toLowerCase();
@@ -787,7 +605,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                   </div>
                 );
               }
-              const contestedSet = detectContested(contributions);
               return (
                 <ul className="flex-1 overflow-y-auto divide-y">
                   {filtered.map(c => {
@@ -800,7 +617,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                         c={c}
                         afterState={afterState}
                         onOpen={() => { setSelectedContribution(c); setShowHistory(false); }}
-                        contested={contestedSet.has(c.id)}
                       />
                     );
                   })}
@@ -863,37 +679,7 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
         </>
       )}
 
-
-      {showMilestones && (
-        <>
-          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowMilestones(false)} />
-          <aside className="fixed top-0 right-0 h-full w-80 bg-white border-l shadow-2xl z-40 flex flex-col">
-            <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-800">Milestones</h2>
-              <button onClick={() => setShowMilestones(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
-            </div>
-            <ul className="flex-1 overflow-y-auto divide-y">
-              {milestones.length === 0 && <li className="px-4 py-6 text-xs text-gray-400 text-center">No milestones yet.</li>}
-              {milestones.map((m: any) => (
-                <li key={m.id} className="px-4 py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-sm text-gray-800">{m.name}</span>
-                    <button onClick={() => fetch(`/api/nodes/${nodeId}/milestones/${m.id}/restore`, { method: "POST" }).then(r => r.ok && r.json()).then(d => d && setNode(prev => prev ? { ...prev, nodeState: d.nodeState, version: d.version } : prev))} className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded hover:bg-indigo-700">
-                      Restore
-                    </button>
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    <span>v{m.version}</span> <span>{m.createdAt ? new Date(m.createdAt).toLocaleDateString() : ""}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </aside>
-        </>
-      )}
-
       {selectedContribution && node && (() => {
-
         const chronIdx = contributions.findIndex(c => c.id === selectedContribution.id);
         const nextContrib = contributions[chronIdx + 1];
         const afterState = nextContrib?.nodeStateBefore ?? node.nodeState;
@@ -932,14 +718,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
             </p>
 
             <form onSubmit={submitContribution} className="space-y-3">
-              <div className="flex flex-wrap gap-1.5 mb-1">
-                {TEMPLATES.map(t => (
-                  <button key={t.label} type="button" onClick={() => { setContribution(t.text); setTimeout(() => textareaRef.current?.focus(), 0); }}
-                    className="px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors border border-gray-200 font-medium">
-                    {t.label}
-                  </button>
-                ))}
-              </div>
               <textarea
                 ref={textareaRef}
                 value={contribution}
@@ -961,17 +739,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 disabled={evolving}
                 className="w-full border rounded-xl px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 placeholder:text-gray-400"
               />
-
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deferContrib}
-                  onChange={e => setDeferContrib(e.target.checked)}
-                  disabled={evolving}
-                  className="rounded"
-                />
-                Defer (add to moderation queue)
-              </label>
 
               {evolveError && (
                 <p className="text-sm text-red-600">{evolveError}</p>

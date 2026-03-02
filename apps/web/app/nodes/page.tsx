@@ -57,6 +57,11 @@ export default function NodesPage() {
   const [error, setError] = useState('');
   const [user, setUser] = useState<User | null>(null);
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [synthesizing, setSynthesizing] = useState(false);
+  const [showSynthesizeForm, setShowSynthesizeForm] = useState(false);
+  const [synthesizeTopic, setSynthesizeTopic] = useState('');
+
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -128,6 +133,31 @@ export default function NodesPage() {
     }
   }
 
+  async function synthesizeNodes() {
+    if (selected.size < 2 || synthesizing) return;
+    const topicName = synthesizeTopic.trim();
+    if (!topicName) return;
+    setSynthesizing(true);
+    setError('');
+    try {
+      const res = await fetch('/api/nodes/synthesize-multiple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeIds: Array.from(selected), topic: topicName }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      router.push(`/nodes/${data.id}`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to synthesize nodes');
+    } finally {
+      setSynthesizing(false);
+      setShowSynthesizeForm(false);
+      setSelected(new Set());
+      setSynthesizeTopic('');
+    }
+  }
+
   // Collect all unique tags across all nodes
   const allTags = Array.from(new Set(nodes.flatMap(n => n.tags ?? [])));
 
@@ -150,6 +180,7 @@ export default function NodesPage() {
           <div className="flex items-center gap-3">
             <Link href="/" className="text-gray-500 hover:text-gray-700 text-sm">← Home</Link>
             <h1 className="text-xl font-bold text-gray-900">Knowledge Base</h1>
+            <Link href="/leaderboard" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium hidden sm:block">Leaderboard →</Link>
           </div>
           <div className="flex items-center gap-3">
             {user && (
@@ -289,10 +320,13 @@ export default function NodesPage() {
         ) : (
           <div className="grid gap-3">
             {filteredNodes.map(node => (
-              <Link
-                key={node.id}
-                href={`/nodes/${node.id}`}
-                className="block bg-white rounded-xl border shadow-sm p-5 hover:shadow-md hover:border-indigo-200 transition-all group"
+              <div key={node.id} className="relative flex items-start group">
+                <div className={`flex-shrink-0 mt-5 ml-2 mr-0 transition-opacity ${selected.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  <input type="checkbox" aria-label={`Select ${node.topic}`} checked={selected.has(node.id)} onChange={e => { e.stopPropagation(); setSelected(prev => { const s=new Set(prev); if(s.has(node.id)) s.delete(node.id); else s.add(node.id); return s; }); }} className="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer" />
+                </div>
+                <Link
+                  href={`/nodes/${node.id}`}
+                  className="flex-1 block bg-white rounded-xl border shadow-sm p-5 hover:shadow-md hover:border-indigo-200 transition-all ml-2"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -324,7 +358,8 @@ export default function NodesPage() {
                   </div>
                   <span className="text-gray-300 group-hover:text-indigo-400 text-lg mt-1 flex-shrink-0">→</span>
                 </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         )}
@@ -337,6 +372,34 @@ export default function NodesPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Synthesize Button */}
+      {selected.size >= 2 && !showSynthesizeForm && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <button onClick={() => setShowSynthesizeForm(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-medium text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2">
+            <span>Synthesize selected ({selected.size})</span>
+            <span className="text-indigo-200">→</span>
+          </button>
+        </div>
+      )}
+
+      {/* Synthesize form modal */}
+      {showSynthesizeForm && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => { setShowSynthesizeForm(false); setSynthesizeTopic(''); }} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t shadow-2xl rounded-t-2xl p-6 max-w-lg mx-auto">
+            <h2 className="font-semibold text-gray-900 mb-2">Synthesize {selected.size} topics</h2>
+            <p className="text-xs text-gray-500 mb-4">Enter a name for the new synthesized topic</p>
+            <form onSubmit={e => { e.preventDefault(); synthesizeNodes(); }} className="space-y-3">
+              <input value={synthesizeTopic} onChange={e => setSynthesizeTopic(e.target.value)} placeholder="New topic name…" required autoFocus className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => { setShowSynthesizeForm(false); setSynthesizeTopic(''); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                <button type="submit" disabled={synthesizing || !synthesizeTopic.trim()} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">{synthesizing ? 'Synthesizing…' : `Synthesize →`}</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
     </div>
   );
 }
