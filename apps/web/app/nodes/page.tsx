@@ -74,7 +74,35 @@ export default function NodesPage() {
   const [model, setModel] = useState(MODELS[0]);
   const [tagsInput, setTagsInput] = useState('');
 
+  // Topic disambiguation state
+  const [topicMatches, setTopicMatches] = useState<any[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [dismissedMatches, setDismissedMatches] = useState<Set<string>>(new Set());
+
   const router = useRouter();
+
+  // Debounced topic match check
+  useEffect(() => {
+    if (!topic.trim() || topic.trim().length < 3) { setTopicMatches([]); return; }
+    const timer = setTimeout(async () => {
+      setMatchLoading(true);
+      try {
+        const res = await fetch('/api/nodes/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: topic.trim() })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTopicMatches((data.matches ?? []).filter((m: any) => m.recommendation !== 'weak'));
+          setDismissedMatches(new Set()); // reset dismissals when query changes
+        }
+      } catch { /* non-fatal */ } finally {
+        setMatchLoading(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [topic]);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -213,6 +241,28 @@ export default function NodesPage() {
                   required
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+                {/* Similar topics found */}
+                {topicMatches.filter(m => !dismissedMatches.has(m.id)).length > 0 && (
+                  <p className="text-xs font-medium text-gray-600 mt-2 mb-1">Similar existing topics:</p>
+                )}
+                <div className="space-y-1.5 mt-1">
+                  {topicMatches.filter(m => !dismissedMatches.has(m.id)).map(m => (
+                    <div key={m.id} className={`flex items-start gap-2 p-2 rounded-lg border text-xs ${m.recommendation === 'contribute' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 truncate">{m.topic}</p>
+                        {m.description && <p className="text-gray-500 truncate">{m.description}</p>}
+                        <span className={`inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-medium ${m.recommendation === 'contribute' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {m.recommendation === 'contribute' ? `${Math.round(m.score * 100)}% match — consider contributing` : `${Math.round(m.score * 100)}% related`}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => router.push(`/nodes/${m.id}`)} className="text-indigo-600 hover:underline font-medium">Contribute →</button>
+                        <button type="button" onClick={() => setDismissedMatches(prev => new Set([...prev, m.id]))} className="text-gray-400 hover:text-gray-600">Ignore</button>
+                      </div>
+                    </div>
+                  ))}
+                  {matchLoading && <p className="text-xs text-gray-400 animate-pulse">Checking for similar topics…</p>}
+                </div>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>

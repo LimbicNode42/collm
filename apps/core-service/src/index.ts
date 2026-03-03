@@ -676,6 +676,106 @@ fastify.post('/nodes/:id/quality-score', async (request, reply) => {
 });
 
 
+// ---------------------------------------------------------------------------
+// Topic matching -- find existing nodes semantically similar to a query
+// ---------------------------------------------------------------------------
+fastify.post('/nodes/match', async (request, reply) => {
+  const { query, threshold = 0.45 } = request.body as { query: string; threshold?: number };
+  if (!query?.trim()) return reply.code(400).send({ error: 'query is required' });
+
+  try {
+    const { embeddingService } = await import('./services/embedding');
+    await embeddingService.initialize();
+
+    const nodes = await prismaCore.node.findMany({
+      select: { id: true, topic: true, description: true, tags: true, version: true, nodeState: true }
+    });
+
+    if (nodes.length === 0) return reply.send({ matches: [], query });
+
+    const queryEmb = await embeddingService.embed(query.trim());
+
+    const scored = await Promise.all(nodes.map(async n => {
+      // Combine topic + description for richer semantic matching
+      const combined = [n.topic, n.description].filter(Boolean).join('. ');
+      const nodeEmb = await embeddingService.embed(combined);
+      const score = embeddingService.cosineSimilarity(queryEmb, nodeEmb);
+      return { id: n.id, topic: n.topic, description: n.description, tags: n.tags, version: n.version, score };
+    }));
+
+    const matches = scored
+      .filter(n => n.score >= threshold)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map(n => ({
+        ...n,
+        recommendation: n.score >= 0.82 ? 'contribute' as const   // Very similar -- likely same topic
+                       : n.score >= 0.55 ? 'related'   as const   // Related -- might want to branch
+                       :                   'weak'       as const   // Weak match -- probably new topic
+      }));
+
+    return reply.send({ matches, query });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Match failed', details: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Contribution relevance -- score a contribution against a node's topic
+// ---------------------------------------------------------------------------
+fastify.post('/nodes/:id/relevance', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { contribution } = request.body as { contribution: string };
+  if (!contribution?.trim()) return reply.code(400).send({ error: 'contribution is required' });
+
+  try {
+    const node = await prismaCore.node.findUnique({
+      where: { id },
+      select: { topic: true, description: true, tags: true }
+    });
+    if (!node) return reply.code(404).send({ error: 'Node not found' });
+
+    const { embeddingService } = await import('./services/embedding');
+    await embeddingService.initialize();
+
+    const topicText = [node.topic, node.description, node.tags?.join(', ')].filter(Boolean).join('. ');
+    const [contribEmb, topicEmb] = await Promise.all([
+      embeddingService.embed(contribution.trim()),
+      embeddingService.embed(topicText)
+    ]);
+
+    const score = embeddingService.cosineSimilarity(contribEmb, topicEmb);
+
+    // Also find if there's a better-matching node for this contribution
+    const allNodes = await prismaCore.node.findMany({
+      where: { id: { not: id } },
+      select: { id: true, topic: true, description: true }
+    });
+
+    let betterMatch: { id: string; topic: string; score: number } | null = null;
+    if (score < 0.4 && allNodes.length > 0) {
+      const otherScores = await Promise.all(allNodes.map(async n => {
+        const combined = [n.topic, n.description].filter(Boolean).join('. ');
+        const emb = await embeddingService.embed(combined);
+        return { id: n.id, topic: n.topic, score: embeddingService.cosineSimilarity(contribEmb, emb) };
+      }));
+      const best = otherScores.sort((a, b) => b.score - a.score)[0];
+      if (best && best.score > score + 0.1) betterMatch = best;
+    }
+
+    return reply.send({
+      score: Math.round(score * 100) / 100,
+      relevant: score >= 0.35,
+      recommendation: score >= 0.6 ? 'highly_relevant'
+                    : score >= 0.35 ? 'relevant'
+                    : 'off_topic',
+      betterMatch
+    });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Relevance check failed', details: String(error) });
+  }
+});
+
 const start = async () => {
   try {
     await fastify.listen({ port: 3003, host: '0.0.0.0' });

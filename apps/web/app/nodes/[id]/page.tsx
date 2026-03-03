@@ -370,6 +370,10 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [evolving, setEvolving] = useState(false);
   const [evolveError, setEvolveError] = useState('');
 
+  // Relevance checking state
+  const [relevanceResult, setRelevanceResult] = useState<{score: number; recommendation: string; betterMatch: {id: string; topic: string; score: number} | null} | null>(null);
+  const [checkingRelevance, setCheckingRelevance] = useState(false);
+
   // History / diff state
   const [showHistory, setShowHistory] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -493,6 +497,28 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
     return () => clearInterval(presenceInterval);
   }, [nodeId, userId]);
 
+  // Debounced relevance check
+  useEffect(() => {
+    if (!panelOpen || !contribution.trim() || contribution.trim().length < 30) {
+      setRelevanceResult(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setCheckingRelevance(true);
+      try {
+        const res = await fetch(`/api/nodes/${nodeId}/relevance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contribution: contribution.trim() })
+        });
+        if (res.ok) setRelevanceResult(await res.json());
+      } catch { /* non-fatal */ } finally {
+        setCheckingRelevance(false);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [contribution, panelOpen, nodeId]);
+
   // Open contribute panel
   function openPanel() {
     setPanelOpen(true);
@@ -505,6 +531,7 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
     setContribution('');
     setSourceUrl('');
     setEvolveError('');
+    setRelevanceResult(null);
   }
 
   async function submitContribution(e: React.FormEvent) {
@@ -952,6 +979,28 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 disabled={evolving}
                 className="w-full border rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 resize-none placeholder:text-gray-400"
               />
+
+              {checkingRelevance && (
+                <p className="text-xs text-gray-400 animate-pulse">Checking relevance…</p>
+              )}
+              {!checkingRelevance && relevanceResult && (
+                <div className={`text-xs px-3 py-2 rounded-lg ${relevanceResult.recommendation === 'highly_relevant' ? 'bg-green-50 text-green-700' : relevanceResult.recommendation === 'relevant' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {relevanceResult.recommendation === 'highly_relevant' && '✓ Highly relevant to this topic'}
+                  {relevanceResult.recommendation === 'relevant' && '✓ Relevant to this topic'}
+                  {relevanceResult.recommendation === 'off_topic' && (
+                    <span>
+                      ⚠️ This may not be relevant to <strong>{node?.topic}</strong>
+                      {relevanceResult.betterMatch && (
+                        <> — it might fit better in{' '}
+                          <button onClick={() => { closePanel(); router.push(`/nodes/${relevanceResult.betterMatch!.id}`); }} className="underline font-medium hover:no-underline">
+                            {relevanceResult.betterMatch.topic}
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
 
               <input
                 type="url"
