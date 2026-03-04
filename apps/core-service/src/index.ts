@@ -13,6 +13,26 @@ const OUTPUT_RESERVE_TOKENS = 8192;
 const CONTEXT_BUDGET_TOKENS  = 150_000;
 const MAX_USER_MESSAGE_CHARS = 20_000;
 
+// Role checking - calls user-service to verify a userId is ADMIN
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3002';
+
+async function getUserRole(userId: string): Promise<string> {
+  if (!userId || userId === 'anonymous') return 'VIEWER';
+  try {
+    const emailRes = await fetch(USER_SERVICE_URL + '/users/by-email/' + encodeURIComponent(userId));
+    if (emailRes.ok) {
+      const u = await emailRes.json();
+      return u.role ?? 'CONTRIBUTOR';
+    }
+    const idRes = await fetch(USER_SERVICE_URL + '/users/' + userId);
+    if (idRes.ok) {
+      const u = await idRes.json();
+      return u.role ?? 'CONTRIBUTOR';
+    }
+  } catch { /* non-fatal - fail open as CONTRIBUTOR */ }
+  return 'CONTRIBUTOR';
+}
+
 function estimateTokens(text: string): number {
   return Math.ceil((text || '').length / 4);
 }
@@ -321,14 +341,14 @@ fastify.post('/llm/chat', async (request, reply) => {
     const duration = Date.now() - startTime;
 
     const userMessage = await prismaCore.message.create({
-      data: { content: message, userId: userName || userId, nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED }
+      data: { content: message, userId, nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED }
     });
     await prismaCore.message.create({
       data: { content: llmResponse.content, userId: 'llm', nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED }
     });
 
     const updatedMemory = await memoryManager.addMessage(node, {
-      id: userMessage.id, content: message, userId: userName || userId,
+      id: userMessage.id, content: message, userId,
       nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED, createdAt: userMessage.createdAt
     }, llmResponse.content);
     const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
@@ -417,7 +437,7 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
     // Deferred mode: store as PENDING without synthesizing immediately
     if (defer) {
       await prismaCore.message.create({
-        data: { content: contribution, userId: userName || userId, nodeId: id, targetNodeVersion: dbNode.version, status: MessageStatus.PENDING, nodeStateBefore: dbNode.nodeState || null, sourceUrl: sourceUrl || null }
+        data: { content: contribution, userId, nodeId: id, targetNodeVersion: dbNode.version, status: MessageStatus.PENDING, nodeStateBefore: dbNode.nodeState || null, sourceUrl: sourceUrl || null }
       });
       return reply.code(202).send({ deferred: true, message: 'Contribution queued for review' });
     }
@@ -448,7 +468,7 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
 
     await prismaCore.message.create({
       data: {
-        content: contribution, userId: userName || userId, nodeId: id,
+        content: contribution, userId, nodeId: id,
         targetNodeVersion: dbNode.version, status: MessageStatus.ACCEPTED,
         nodeStateBefore: currentState || null, sourceUrl: sourceUrl || null,
       },
@@ -607,6 +627,41 @@ fastify.get('/leaderboard', async (_request, reply) => {
   return reply.send({ leaderboard });
 });
 
+// Per-topic contributor leaderboard
+fastify.get('/nodes/:id/leaderboard', async (request, reply) => {
+  const { id } = request.params as { id: string };
+
+  const node = await prismaCore.node.findUnique({ where: { id }, select: { topic: true } });
+  if (!node) return reply.code(404).send({ error: 'Node not found' });
+
+  const messages = await prismaCore.message.findMany({
+    where: { nodeId: id, status: MessageStatus.ACCEPTED, NOT: { userId: 'llm' } },
+    include: { votes: true }
+  });
+
+  const userStats = new Map<string, { contributionCount: number; netVotes: number; totalUpvotes: number; totalDownvotes: number; totalImpact: number }>();
+
+  for (const msg of messages) {
+    const stats = userStats.get(msg.userId) ?? { contributionCount: 0, netVotes: 0, totalUpvotes: 0, totalDownvotes: 0, totalImpact: 0 };
+    const upvotes = msg.votes.filter(v => v.value === 1).length;
+    const downvotes = msg.votes.filter(v => v.value === -1).length;
+    const impact = msg.nodeStateBefore != null ? Math.abs(msg.content.length) : 0;
+    userStats.set(msg.userId, {
+      contributionCount: stats.contributionCount + 1,
+      netVotes: stats.netVotes + upvotes - downvotes,
+      totalUpvotes: stats.totalUpvotes + upvotes,
+      totalDownvotes: stats.totalDownvotes + downvotes,
+      totalImpact: stats.totalImpact + impact
+    });
+  }
+
+  const leaderboard = Array.from(userStats.entries())
+    .map(([userId, stats]) => ({ userId, ...stats }))
+    .sort((a, b) => b.netVotes - a.netVotes || b.contributionCount - a.contributionCount);
+
+  return reply.send({ leaderboard, topic: node.topic, nodeId: id });
+});
+
 
 // ---------------------------------------------------------------------------
 // Feature: Multi-document synthesis
@@ -615,6 +670,11 @@ fastify.post('/nodes/synthesize-multiple', async (request, reply) => {
   const { nodeIds, topic, description, model } = request.body as { nodeIds: string[]; topic: string; description?: string; model?: string };
   if (!nodeIds || nodeIds.length < 2) return reply.code(400).send({ error: 'At least 2 nodeIds required' });
   if (!topic?.trim()) return reply.code(400).send({ error: 'topic is required' });
+
+  // Check admin role
+  const { requestedBy } = request.body as any;
+  const role = requestedBy ? await getUserRole(requestedBy) : 'CONTRIBUTOR';
+  if (role !== 'ADMIN') return reply.code(403).send({ error: 'Admin role required to synthesize topics' });
   
   const nodes = await prismaCore.node.findMany({ where: { id: { in: nodeIds } }, select: { id: true, topic: true, nodeState: true } });
   if (nodes.length < 2) return reply.code(404).send({ error: 'Could not find the specified nodes' });
@@ -776,6 +836,81 @@ fastify.post('/nodes/:id/relevance', async (request, reply) => {
   }
 });
 
+
+// ---------------------------------------------------------------------------
+// Delete a node (admin only)
+// ---------------------------------------------------------------------------
+fastify.delete('/nodes/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const body = request.body as { userId?: string } | null;
+  const userId = body && (body as any).userId ? (body as any).userId : '';
+
+  const role = await getUserRole(userId);
+  if (role !== 'ADMIN') return reply.code(403).send({ error: 'Admin role required to delete topics' });
+
+  try {
+    const node = await prismaCore.node.findUnique({ where: { id } });
+    if (!node) return reply.code(404).send({ error: 'Node not found' });
+
+    await prismaCore.vote.deleteMany({ where: { message: { nodeId: id } } });
+    await prismaCore.message.deleteMany({ where: { nodeId: id } });
+    await (prismaCore as any).milestone.deleteMany({ where: { nodeId: id } });
+    await prismaCore.node.delete({ where: { id } });
+
+    return reply.send({ success: true });
+  } catch (error) {
+    return reply.code(500).send({ error: 'Delete failed', details: String(error) });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User contribution stats (for profile pages)
+// ---------------------------------------------------------------------------
+fastify.get('/nodes/user-stats/:id', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { displayName } = request.query as { displayName?: string };
+  // Support looking up by email OR legacy display name (old messages stored display names)
+  const userIds = [...new Set([decodeURIComponent(id), displayName].filter(Boolean) as string[])];
+  const messages = await prismaCore.message.findMany({
+    where: {
+      userId: { in: userIds },
+      status: MessageStatus.ACCEPTED,
+      NOT: { userId: 'llm' }
+    },
+    include: { votes: true, node: { select: { id: true, topic: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const totalUpvotes = messages.reduce((s, m) => s + m.votes.filter(v => v.value === 1).length, 0);
+  const totalDownvotes = messages.reduce((s, m) => s + m.votes.filter(v => v.value === -1).length, 0);
+  const netVotes = totalUpvotes - totalDownvotes;
+
+  const nodeMap = new Map<string, { nodeId: string; topic: string; count: number }>();
+  for (const msg of messages) {
+    const key = msg.node.id;
+    const existing = nodeMap.get(key) ?? { nodeId: key, topic: msg.node.topic, count: 0 };
+    nodeMap.set(key, { ...existing, count: existing.count + 1 });
+  }
+  const topicBreakdown = Array.from(nodeMap.values()).sort((a, b) => b.count - a.count);
+
+  return reply.send({
+    userId: decodeURIComponent(id),
+    totalContributions: messages.length,
+    netVotes,
+    totalUpvotes,
+    totalDownvotes,
+    topicBreakdown,
+    recentContributions: messages.slice(0, 10).map(m => ({
+      id: m.id,
+      content: m.content.slice(0, 200),
+      createdAt: m.createdAt,
+      nodeId: m.node.id,
+      topic: m.node.topic,
+      upvotes: m.votes.filter(v => v.value === 1).length,
+      downvotes: m.votes.filter(v => v.value === -1).length,
+    }))
+  });
+});
 const start = async () => {
   try {
     await fastify.listen({ port: 3003, host: '0.0.0.0' });

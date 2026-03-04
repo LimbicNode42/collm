@@ -103,11 +103,52 @@ export async function buildApp(): Promise<FastifyInstance> {
   fastify.get('/users/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const user = await userService.getUser(id);
+      // Try ID first, then email — profile URLs may use email as the identifier
+    let user = await userService.getUser(id);
+    if (!user) user = await userService.getUserByEmail(decodeURIComponent(id));
+    if (!user) user = await userService.getUserByName(id);
       if (!user) {
         return reply.code(404).send({ error: 'User not found' });
       }
       return reply.send(user);
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // PATCH /users/:id — update own profile (name only)
+  fastify.patch('/users/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { name } = request.body as { name?: string };
+    try {
+      const updated = await userService.updateUser(id, { name });
+      if (!updated) return reply.code(404).send({ error: 'User not found' });
+      return reply.send(updated);
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // GET /users/by-email/:email — lookup user by email (used by core-service for role checks)
+  fastify.get('/users/by-email/:email', async (request, reply) => {
+    const { email } = request.params as { email: string };
+    try {
+      const user = await userService.getUserByEmail(decodeURIComponent(email));
+      if (!user) return reply.code(404).send({ error: 'User not found' });
+      return reply.send(user);
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // GET /users — list all users (admin panel use)
+  fastify.get('/users', async (_request, reply) => {
+    try {
+      const users = await userService.getAllUsers();
+      return reply.send({ users });
     } catch (error) {
       fastify.log.error(error);
       return reply.code(500).send({ error: 'Internal Server Error' });

@@ -57,6 +57,9 @@ export default function NodesPage() {
   const [error, setError] = useState('');
   const [user, setUser] = useState<User | null>(null);
 
+  const userRole = (user as any)?.role ?? 'CONTRIBUTOR';
+  const isAdmin = userRole === 'ADMIN';
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [synthesizing, setSynthesizing] = useState(false);
   const [showSynthesizeForm, setShowSynthesizeForm] = useState(false);
@@ -109,6 +112,17 @@ export default function NodesPage() {
     if (stored) {
       setUser(JSON.parse(stored));
       loadNodes();
+      // Fetch fresh user data including role
+      const storedUser = JSON.parse(stored);
+      fetch(`/api/users/${encodeURIComponent(storedUser.email || storedUser.id)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(fresh => {
+          if (fresh) {
+            const updated = { ...storedUser, ...fresh };
+            localStorage.setItem('user', JSON.stringify(updated));
+            setUser(updated);
+          }
+        });
     } else {
       router.replace('/login');
     }
@@ -171,11 +185,11 @@ export default function NodesPage() {
       const res = await fetch('/api/nodes/synthesize-multiple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeIds: Array.from(selected), topic: topicName }),
+        body: JSON.stringify({ nodeIds: Array.from(selected), topic: topicName, requestedBy: user?.email || user?.id }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      router.push(`/nodes/${data.id}`);
+      router.push(`/nodes/${data.node?.id ?? data.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to synthesize nodes');
     } finally {
@@ -216,6 +230,11 @@ export default function NodesPage() {
                 <strong>{user.name || user.email}</strong>
               </span>
             )}
+            {user && (
+              <Link href={`/users/${encodeURIComponent(user?.email || user?.id || '')}`} className="text-xs text-gray-500 hover:text-indigo-600 hover:underline hidden sm:block">
+                My Profile
+              </Link>
+            )}
             <button
               onClick={() => setShowCreate(v => !v)}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
@@ -239,7 +258,7 @@ export default function NodesPage() {
                   value={topic} onChange={e => setTopic(e.target.value)}
                   placeholder="e.g. Climate Change Policy"
                   required
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
                 />
                 {/* Similar topics found */}
                 {topicMatches.filter(m => !dismissedMatches.has(m.id)).length > 0 && (
@@ -270,7 +289,7 @@ export default function NodesPage() {
                   value={description} onChange={e => setDescription(e.target.value)}
                   placeholder="What should this topic cover?"
                   rows={2}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
                 />
               </div>
               <div>
@@ -278,7 +297,7 @@ export default function NodesPage() {
                 <input
                   value={tagsInput} onChange={e => setTagsInput(e.target.value)}
                   placeholder="science, economics, policy (comma-separated)"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
                 />
                 {tagsInput.trim() && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -293,7 +312,7 @@ export default function NodesPage() {
                 <select
                   value={model} onChange={e => setModel(e.target.value)}
                   aria-label="Select AI model"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
@@ -408,7 +427,28 @@ export default function NodesPage() {
                   </div>
                   <span className="text-gray-300 group-hover:text-indigo-400 text-lg mt-1 flex-shrink-0">→</span>
                 </div>
+
                 </Link>
+                {isAdmin && (
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      if (!confirm(`Delete ${node.topic}? This cannot be undone.`)) return;
+                      try {
+                        const res = await fetch(`/api/nodes/${node.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId: user?.email || user?.id })
+                        });
+                        if (res.ok) setNodes(prev => prev.filter(x => x.id !== node.id));
+                      } catch { /* non-fatal */ }
+                    }}
+                    className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors text-xs"
+                    title="Delete topic (admin)"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -424,7 +464,7 @@ export default function NodesPage() {
       </div>
 
       {/* Floating Synthesize Button */}
-      {selected.size >= 2 && !showSynthesizeForm && (
+      {isAdmin && selected.size >= 2 && !showSynthesizeForm && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <button onClick={() => setShowSynthesizeForm(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-medium text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2">
             <span>Synthesize selected ({selected.size})</span>
@@ -441,7 +481,7 @@ export default function NodesPage() {
             <h2 className="font-semibold text-gray-900 mb-2">Synthesize {selected.size} topics</h2>
             <p className="text-xs text-gray-500 mb-4">Enter a name for the new synthesized topic</p>
             <form onSubmit={e => { e.preventDefault(); synthesizeNodes(); }} className="space-y-3">
-              <input value={synthesizeTopic} onChange={e => setSynthesizeTopic(e.target.value)} placeholder="New topic name…" required autoFocus className="w-full border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input value={synthesizeTopic} onChange={e => setSynthesizeTopic(e.target.value)} placeholder="New topic name…" required autoFocus className="w-full border rounded-xl px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400" />
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => { setShowSynthesizeForm(false); setSynthesizeTopic(''); }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
                 <button type="submit" disabled={synthesizing || !synthesizeTopic.trim()} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">{synthesizing ? 'Synthesizing…' : `Synthesize →`}</button>

@@ -6,6 +6,7 @@ export interface User {
   name?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  role?: string;
 }
 
 export interface NodeMemory {

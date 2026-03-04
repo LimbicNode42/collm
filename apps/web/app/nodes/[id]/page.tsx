@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useRef, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
@@ -186,12 +186,12 @@ function ContributionListItem({ c, afterState, onOpen, contested }: { c: Contrib
       className="flex gap-3 px-4 py-3 text-sm cursor-pointer hover:bg-indigo-50 transition-colors group"
       onClick={onOpen}
     >
-      <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+      <Link href={`/users/${encodeURIComponent(c.userId)}`} onClick={e => e.stopPropagation()} className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 hover:bg-indigo-200 transition-colors">
         {c.userId[0]?.toUpperCase() ?? '?'}
-      </div>
+      </Link>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="font-medium text-gray-700 truncate text-xs">{c.userId}</span>
+          <Link href={`/users/${encodeURIComponent(c.userId)}`} onClick={e => e.stopPropagation()} className="font-medium text-gray-700 truncate text-xs hover:text-indigo-700 hover:underline transition-colors">{c.userId}</Link>
           <span className="text-gray-400 text-xs flex-shrink-0">{timeAgo(c.createdAt)}</span>
           {impact !== null && impact > 0 && (
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${impact >= 30 ? 'bg-green-100 text-green-700' : impact >= 10 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -380,12 +380,16 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [selectedContribution, setSelectedContribution] = useState<Contribution | null>(null);
 
   // Extra panels + form fields
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showFactBrowser, setShowFactBrowser] = useState(false);
   const [showTOC, setShowTOC] = useState(false);
   const [sourceUrl, setSourceUrl] = useState('');
   const [userVotes, setUserVotes] = useState<Record<string, number>>({});
   const [showMilestones, setShowMilestones] = useState(false);
   const [milestones, setMilestones] = useState<any[]>([]);
+  const [showTopContributors, setShowTopContributors] = useState(false);
+  const [topContributors, setTopContributors] = useState<any[]>([]);
+  const [topContributorsLoading, setTopContributorsLoading] = useState(false);
   const [pendingContribs, setPendingContribs] = useState<any[]>([]);
   const [relatedNodes, setRelatedNodes] = useState<any[]>([]);
   const [viewers, setViewers] = useState<string[]>([]);
@@ -461,6 +465,19 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
       // non-fatal
     }
   }, [nodeId]);
+
+  const loadTopContributors = async () => {
+    setTopContributorsLoading(true);
+    try {
+      const res = await fetch(`/api/nodes/${nodeId}/leaderboard`);
+      if (res.ok) {
+        const data = await res.json();
+        setTopContributors(data.leaderboard ?? []);
+      }
+    } catch { /* non-fatal */ } finally {
+      setTopContributorsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -612,24 +629,10 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {node?.nodeState && extractTOC(node.nodeState).length > 0 && (
-              <button onClick={() => setShowTOC(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-                Contents
-              </button>
-            )}
-            {(node?.memory?.keyFacts?.length ?? 0) > 0 && (
-              <button onClick={() => setShowFactBrowser(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-                {node?.memory?.keyFacts?.length} facts
-              </button>
-            )}
-            {contributions.length > 0 && (
-              <button onClick={() => setShowHistory(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-                {contributions.length} contribution{contributions.length !== 1 ? 's' : ''}
-              </button>
-            )}
-           {viewers.length > 0 && (
-              <div className="flex items-center gap-1 mr-1">
-                {viewers.slice(0, 5).map((v, i) => (
+            {/* Live viewer avatars */}
+            {viewers.length > 0 && (
+              <div className="flex items-center gap-1">
+                {viewers.slice(0, 3).map((v, i) => (
                   <div key={i} title={v} className="w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0"
                     style={{ backgroundColor: `hsl(${v.charCodeAt(0) * 37 % 360}, 60%, 50%)` }}>
                     {v[0]?.toUpperCase()}
@@ -637,29 +640,67 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 ))}
               </div>
             )}
-            {node?.nodeState && (
-              <button onClick={() => { const n = window.prompt('Milestone name'); if (n) { fetch(`/api/nodes/${nodeId}/milestones`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n }) }).then(r => { if (r.ok) loadContributions(); }); } }} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-                Save milestone
+            {/* Contributions count */}
+            {contributions.length > 0 && (
+              <button onClick={() => setShowHistory(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                {contributions.length} contribution{contributions.length !== 1 ? 's' : ''}
               </button>
             )}
-            <button onClick={() => setShowMilestones(v => !v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors hidden sm:block">
-              Milestones
-            </button>
-            <button
-              onClick={async () => {
-                if (scoringQuality) return;
-                setScoringQuality(true);
-                try {
-                  await fetch(`/api/nodes/${nodeId}/quality-score`, { method: 'POST' });
-                  setTimeout(() => { loadNode(); setScoringQuality(false); }, 3000);
-                } catch { setScoringQuality(false); }
-              }}
-              disabled={scoringQuality}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 hidden sm:block"
-            >
-              {scoringQuality ? 'Scoring…' : '⭐ Score quality'}
-            </button>
-            <button onClick={openPanel} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+            {/* More actions dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMoreMenu(v => !v)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                title="More actions"
+              >
+                ⋯
+              </button>
+              {showMoreMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowMoreMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-lg z-40 py-1 text-sm">
+                    {node?.nodeState && extractTOC(node.nodeState).length > 0 && (
+                      <button onClick={() => { setShowTOC(v => !v); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        📋 Contents
+                      </button>
+                    )}
+                    {(node?.memory?.keyFacts?.length ?? 0) > 0 && (
+                      <button onClick={() => { setShowFactBrowser(v => !v); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        🧠 {node?.memory?.keyFacts?.length} Key Facts
+                      </button>
+                    )}
+                    <button onClick={() => { setShowTopContributors(true); loadTopContributors(); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                      🏆 Top Contributors
+                    </button>
+                    <button onClick={() => { setShowMilestones(v => !v); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                      📌 Milestones
+                    </button>
+                    {node?.nodeState && (
+                      <button onClick={() => { setShowMoreMenu(false); const n = window.prompt('Milestone name'); if (n) { fetch(`/api/nodes/${nodeId}/milestones`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n }) }).then(r => { if (r.ok) loadContributions(); }); } }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        💾 Save Milestone
+                      </button>
+                    )}
+                    <div className="border-t border-gray-100 my-1" />
+                    <button
+                      onClick={async () => {
+                        setShowMoreMenu(false);
+                        if (scoringQuality) return;
+                        setScoringQuality(true);
+                        try {
+                          await fetch(`/api/nodes/${nodeId}/quality-score`, { method: 'POST' });
+                          setTimeout(() => { loadNode(); setScoringQuality(false); }, 3000);
+                        } catch { setScoringQuality(false); }
+                      }}
+                      disabled={scoringQuality}
+                      className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      {scoringQuality ? '⏳ Scoring…' : '⭐ Score Quality'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={openPanel} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors whitespace-nowrap">
               + Contribute
             </button>
           </div>
@@ -918,6 +959,48 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
           </aside>
         </>
       )}
+
+      {showTopContributors && (
+        <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowTopContributors(false)} />
+      )}
+      <div className={`fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ${showTopContributors ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800 text-sm">🏆 Top Contributors</h3>
+          <button onClick={() => setShowTopContributors(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {topContributorsLoading ? (
+            <div className="p-4 space-y-3 animate-pulse">
+              {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
+            </div>
+          ) : topContributors.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-10">No contributions yet.</p>
+          ) : (
+            <ol className="divide-y divide-gray-50">
+              {topContributors.map((e, i) => (
+                <li key={e.userId} className="px-4 py-3 flex items-center gap-3">
+                  <span className="text-base w-6 text-center flex-shrink-0">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-xs text-gray-500 font-bold">#{i+1}</span>}
+                  </span>
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center flex-shrink-0">
+                    {e.userId[0]?.toUpperCase() ?? '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{e.userId}</p>
+                    <p className="text-xs text-gray-400">{e.contributionCount} contribution{e.contributionCount !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-xs font-bold ${e.netVotes >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {e.netVotes > 0 ? `+${e.netVotes}` : e.netVotes}
+                    </p>
+                    <p className="text-xs text-gray-400">votes</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
 
       {selectedContribution && node && (() => {
 
