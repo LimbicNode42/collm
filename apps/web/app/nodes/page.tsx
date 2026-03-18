@@ -223,6 +223,9 @@ export default function NodesPage() {
             <Link href="/" className="text-gray-500 hover:text-gray-700 text-sm">← Home</Link>
             <h1 className="text-xl font-bold text-gray-900">Knowledge Base</h1>
             <Link href="/leaderboard" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium hidden sm:block">Leaderboard →</Link>
+            {isAdmin && (
+              <Link href="/admin/rbac" className="text-sm text-red-600 hover:text-red-800 font-medium hidden sm:block">🛡 Admin</Link>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {user && (

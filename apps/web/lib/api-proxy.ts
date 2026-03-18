@@ -64,9 +64,10 @@ export async function proxyToService(
     );
   }
 
-  // Remove /api prefix and construct target URL
+  // Remove /api prefix and construct target URL (preserve query string)
+  const url = new URL(request.url);
   const targetPath = path.replace(/^\/api/, '');
-  const targetUrl = `${service.baseUrl}${targetPath}`;
+  const targetUrl = `${service.baseUrl}${targetPath}${url.search}`;
   
   try {
     // Log API calls for contract debugging
@@ -115,13 +116,13 @@ export async function proxyToService(
  */
 export function createProxyHandler() {
   return async function handler(request: Request) {
-    const url = new URL(request.url);
-    const path = url.pathname;
+  const url2 = new URL(request.url);
+  const path = url2.pathname;
     
     // Add CORS headers for development
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
     

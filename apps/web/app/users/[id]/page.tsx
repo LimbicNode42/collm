@@ -34,7 +34,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const isOwnProfile = currentUser?.id === id || currentUser?.email === id;
+  const isOwnProfile = !!(profile && currentUser && (
+    currentUser.id === profile.id || currentUser.email === profile.email
+  ));
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -47,15 +49,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     setLoading(true);
     const encodedId = encodeURIComponent(id);
 
-    // Fetch profile first so we know the display name, then fetch stats with both
-    fetch(`/api/users/${encodedId}`)
+    // Use /users/search?q= to avoid URL path encoding issues with @ in emails
+    fetch(`/api/users/search?q=${encodedId}`)
       .then(async r => { if (!r.ok) return null; try { return await r.json(); } catch { return null; } })
       .then(async profileData => {
         setProfile(profileData ?? null);
         setEditName(profileData?.name ?? '');
-        // Include displayName so old contributions (stored with display name) are found too
-        const nameParam = profileData?.name ? `?displayName=${encodeURIComponent(profileData.name)}` : '';
-        const statsData = await fetch(`/api/nodes/user-stats/${encodedId}${nameParam}`)
+        if (!profileData) { setStats(null); return; }
+        // Always use the profile's email as canonical ID, add displayName for legacy contributions
+        const emailEncoded = encodeURIComponent(profileData.email);
+        const nameParam = profileData.name ? `?displayName=${encodeURIComponent(profileData.name)}` : '';
+        const statsData = await fetch(`/api/nodes/user-stats/${emailEncoded}${nameParam}`)
           .then(r => r.ok ? r.json().catch(() => null) : null)
           .catch(() => null);
         setStats(statsData);
@@ -168,9 +172,16 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   <p className="text-sm text-gray-500 mt-0.5">{profile.email}</p>
                   <p className="text-xs text-gray-400 mt-1">Member since {new Date(profile.createdAt).toLocaleDateString()}</p>
                   {isOwnProfile && (
-                    <button onClick={() => setEditing(true)} className="mt-2 text-xs text-indigo-600 hover:underline">
-                      ✏️ Edit profile
-                    </button>
+                    <div className="mt-2 flex items-center gap-3 flex-wrap">
+                      <button onClick={() => setEditing(true)} className="text-xs text-indigo-600 hover:underline">
+                        ✏️ Edit profile
+                      </button>
+                      {profile.role === 'ADMIN' && (
+                        <Link href="/admin/rbac" className="text-xs text-red-600 hover:underline font-medium">
+                          🛡 Admin Panel
+                        </Link>
+                      )}
+                    </div>
                   )}
                 </>
               )}

@@ -9,6 +9,7 @@ export interface IUserService {
   getUserByName(name: string): Promise<User | null>;
   validateUser(email: string, password: string): Promise<User | null>;
   updateUser(id: string, updates: { name?: string }): Promise<User | null>;
+  updateUserRole(id: string, role: string): Promise<User | null>;
   getAllUsers(): Promise<User[]>;
 }
 
@@ -58,6 +59,21 @@ export class UserService implements IUserService {
       const user = await prismaUser.user.update({
         where: { id },
         data: { ...(updates.name !== undefined && { name: updates.name }) },
+      });
+      const { password: _, ...userWithoutPassword } = user;
+      return userWithoutPassword as User;
+    } catch {
+      return null;
+    }
+  }
+
+  async updateUserRole(id: string, role: string): Promise<User | null> {
+    const VALID_ROLES = ['ADMIN', 'CONTRIBUTOR', 'VIEWER'];
+    if (!VALID_ROLES.includes(role)) return null;
+    try {
+      const user = await prismaUser.user.update({
+        where: { id },
+        data: { role },
       });
       const { password: _, ...userWithoutPassword } = user;
       return userWithoutPassword as User;

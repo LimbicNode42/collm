@@ -237,6 +237,10 @@ components:
         name:
           type: string
           nullable: true
+        role:
+          type: string
+          description: User role (ADMIN, CONTRIBUTOR, or VIEWER)
+          enum: [ADMIN, CONTRIBUTOR, VIEWER]
         createdAt:
           type: string
           format: date-time

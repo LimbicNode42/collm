@@ -195,6 +195,8 @@ export interface components {
       /** Format: email */
       email?: string;
       name?: string | null;
+      /** @description User role: ADMIN, CONTRIBUTOR, or VIEWER */
+      role?: string;
       /** Format: date-time */
       createdAt?: string;
       /** Format: date-time */

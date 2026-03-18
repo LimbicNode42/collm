@@ -47,3 +47,8 @@ local.tfvars
 # Windows reserved device name accidentally created at repo root
 nul
 NUL
+
+# SQLite databases (use PostgreSQL instead)
+*.db
+*.sqlite
+*.sqlite3

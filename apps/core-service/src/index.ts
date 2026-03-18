@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -598,20 +598,56 @@ fastify.post('/nodes/:id/milestones/:milestoneId/restore', async (request, reply
 // ---------------------------------------------------------------------------
 // Feature: Contributor Reputation Leaderboard
 // ---------------------------------------------------------------------------
-fastify.get('/leaderboard', async (_request, reply) => {
-  const messages = await prismaCore.message.findMany({
-    where: { status: MessageStatus.ACCEPTED, NOT: { userId: 'llm' } },
-    include: { votes: true }
-  });
-  
+// System userIds that should never appear in leaderboards or stats
+const SYSTEM_USER_IDS = new Set(['llm', 'anonymous', 'system', '']);
+
+/**
+ * Resolve a batch of raw userIds (which may be emails OR display names from old messages)
+ * to canonical emails by querying the user-service.
+ * Returns a Map<rawUserId, canonicalEmail>.
+ */
+async function resolveUserIds(rawIds: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(rawIds)].filter(id => !SYSTEM_USER_IDS.has(id));
+  const map = new Map<string, string>();
+
+  await Promise.all(unique.map(async (rawId) => {
+    try {
+      // Try email lookup first (fast path for already-canonical ids)
+      let res = await fetch(`${USER_SERVICE_URL}/users/by-email/${encodeURIComponent(rawId)}`);
+      if (res.ok) {
+        const u = await res.json();
+        map.set(rawId, u.email ?? rawId);
+        return;
+      }
+      // Fall back: search by id or display name
+      res = await fetch(`${USER_SERVICE_URL}/users/search?q=${encodeURIComponent(rawId)}`);
+      if (res.ok) {
+        const u = await res.json();
+        map.set(rawId, u.email ?? rawId);
+        return;
+      }
+    } catch { /* non-fatal */ }
+    // No match found — keep raw value as canonical
+    map.set(rawId, rawId);
+  }));
+
+  return map;
+}
+
+function buildLeaderboardStats(
+  messages: Array<{ userId: string; content: string; nodeStateBefore: string | null; votes: Array<{ value: number }> }>,
+  idMap: Map<string, string>
+) {
   const userStats = new Map<string, { contributionCount: number; netVotes: number; totalUpvotes: number; totalDownvotes: number; totalImpact: number }>();
-  
+
   for (const msg of messages) {
-    const stats = userStats.get(msg.userId) ?? { contributionCount: 0, netVotes: 0, totalUpvotes: 0, totalDownvotes: 0, totalImpact: 0 };
+    if (SYSTEM_USER_IDS.has(msg.userId)) continue;
+    const canonical = idMap.get(msg.userId) ?? msg.userId;
+    const stats = userStats.get(canonical) ?? { contributionCount: 0, netVotes: 0, totalUpvotes: 0, totalDownvotes: 0, totalImpact: 0 };
     const upvotes = msg.votes.filter(v => v.value === 1).length;
     const downvotes = msg.votes.filter(v => v.value === -1).length;
     const impact = msg.nodeStateBefore != null ? Math.abs(msg.content.length) : 0;
-    userStats.set(msg.userId, {
+    userStats.set(canonical, {
       contributionCount: stats.contributionCount + 1,
       netVotes: stats.netVotes + upvotes - downvotes,
       totalUpvotes: stats.totalUpvotes + upvotes,
@@ -619,11 +655,22 @@ fastify.get('/leaderboard', async (_request, reply) => {
       totalImpact: stats.totalImpact + impact
     });
   }
-  
-  const leaderboard = Array.from(userStats.entries())
+
+  return Array.from(userStats.entries())
     .map(([userId, stats]) => ({ userId, ...stats }))
     .sort((a, b) => b.netVotes - a.netVotes || b.contributionCount - a.contributionCount);
-  
+}
+
+fastify.get('/leaderboard', async (_request, reply) => {
+  const messages = await prismaCore.message.findMany({
+    where: { status: MessageStatus.ACCEPTED, NOT: { userId: { in: ['llm', 'anonymous', 'system'] } } },
+    include: { votes: true }
+  });
+
+  const rawIds = messages.map(m => m.userId);
+  const idMap = await resolveUserIds(rawIds);
+  const leaderboard = buildLeaderboardStats(messages, idMap);
+
   return reply.send({ leaderboard });
 });
 
@@ -635,29 +682,13 @@ fastify.get('/nodes/:id/leaderboard', async (request, reply) => {
   if (!node) return reply.code(404).send({ error: 'Node not found' });
 
   const messages = await prismaCore.message.findMany({
-    where: { nodeId: id, status: MessageStatus.ACCEPTED, NOT: { userId: 'llm' } },
+    where: { nodeId: id, status: MessageStatus.ACCEPTED, NOT: { userId: { in: ['llm', 'anonymous', 'system'] } } },
     include: { votes: true }
   });
 
-  const userStats = new Map<string, { contributionCount: number; netVotes: number; totalUpvotes: number; totalDownvotes: number; totalImpact: number }>();
-
-  for (const msg of messages) {
-    const stats = userStats.get(msg.userId) ?? { contributionCount: 0, netVotes: 0, totalUpvotes: 0, totalDownvotes: 0, totalImpact: 0 };
-    const upvotes = msg.votes.filter(v => v.value === 1).length;
-    const downvotes = msg.votes.filter(v => v.value === -1).length;
-    const impact = msg.nodeStateBefore != null ? Math.abs(msg.content.length) : 0;
-    userStats.set(msg.userId, {
-      contributionCount: stats.contributionCount + 1,
-      netVotes: stats.netVotes + upvotes - downvotes,
-      totalUpvotes: stats.totalUpvotes + upvotes,
-      totalDownvotes: stats.totalDownvotes + downvotes,
-      totalImpact: stats.totalImpact + impact
-    });
-  }
-
-  const leaderboard = Array.from(userStats.entries())
-    .map(([userId, stats]) => ({ userId, ...stats }))
-    .sort((a, b) => b.netVotes - a.netVotes || b.contributionCount - a.contributionCount);
+  const rawIds = messages.map(m => m.userId);
+  const idMap = await resolveUserIds(rawIds);
+  const leaderboard = buildLeaderboardStats(messages, idMap);
 
   return reply.send({ leaderboard, topic: node.topic, nodeId: id });
 });
