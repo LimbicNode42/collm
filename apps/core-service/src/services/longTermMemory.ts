@@ -43,7 +43,7 @@ export interface ConfidenceEvent {
 }
 
 export class SemanticLongTermMemory implements ILongTermMemory {
-  private readonly SIMILARITY_THRESHOLD = 0.75; // Facts above this similarity are considered duplicates (lowered for better merging)
+  private readonly SIMILARITY_THRESHOLD = 0.70; // Facts above this similarity are considered duplicates (lowered for better merging)
   private readonly MIN_CONFIDENCE_THRESHOLD = 0.2;
   private readonly MAX_FACTS = 50; // Limit maximum number of facts per node
   private readonly CONFIDENCE_WEIGHTS = {
@@ -217,7 +217,8 @@ Extract facts that are:
 2. Relevant to the core topic
 3. Worth remembering for future conversations
 4. Specific and actionable
-5. **IMPORTANT: Extract ONLY the 3-5 most important facts. Quality over quantity!**
+5. **IMPORTANT: Extract ONLY the 2-3 most important, novel facts. Quality over quantity!**
+6. **Skip facts that are already obvious from the topic/core context.**
 
 Return a JSON array of objects with this structure:
 {

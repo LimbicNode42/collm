@@ -198,5 +198,94 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
+  // DELETE /users/:id — admin hard-deletes a user account
+  fastify.delete('/users/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { requestedBy } = request.query as { requestedBy?: string };
+    if (!requestedBy) return reply.code(401).send({ error: 'requestedBy is required' });
+
+    try {
+      // Prevent deleting yourself
+      if (id === requestedBy) {
+        return reply.code(400).send({ error: 'You cannot delete your own account via admin panel' });
+      }
+      // Verify requester is admin
+      let requester = await userService.getUser(requestedBy);
+      if (!requester) requester = await userService.getUserByEmail(requestedBy);
+      if (!requester || requester.role !== 'ADMIN') {
+        return reply.code(403).send({ error: 'Admin role required to delete users' });
+      }
+      const deleted = await userService.deleteUser(id);
+      if (!deleted) return reply.code(404).send({ error: 'User not found' });
+      return reply.send({ success: true, message: 'User deleted' });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // POST /admin/users — admin creates a user with a specified role
+  fastify.post('/admin/users', async (request, reply) => {
+    const { email, password, name, role, requestedBy } = request.body as {
+      email?: string;
+      password?: string;
+      name?: string;
+      role?: string;
+      requestedBy?: string;
+    };
+
+    if (!email || !password) {
+      return reply.code(400).send({ error: 'email and password are required' });
+    }
+    if (!requestedBy) return reply.code(401).send({ error: 'requestedBy is required' });
+
+    try {
+      // Verify requester is admin
+      let requester = await userService.getUser(requestedBy);
+      if (!requester) requester = await userService.getUserByEmail(requestedBy);
+      if (!requester || requester.role !== 'ADMIN') {
+        return reply.code(403).send({ error: 'Admin role required to create users' });
+      }
+      // Check email not already taken
+      const existing = await userService.getUserByEmail(email);
+      if (existing) return reply.code(409).send({ error: 'A user with this email already exists' });
+
+      const user = await userService.createUser(email, password, name, role);
+      return reply.code(201).send({ success: true, user });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
+  // POST /users/:id/reset-password — admin resets a user's password
+  fastify.post('/users/:id/reset-password', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { newPassword, requestedBy } = request.body as {
+      newPassword?: string;
+      requestedBy?: string;
+    };
+
+    if (!newPassword || newPassword.length < 8) {
+      return reply.code(400).send({ error: 'newPassword must be at least 8 characters' });
+    }
+    if (!requestedBy) return reply.code(401).send({ error: 'requestedBy is required' });
+
+    try {
+      // Verify requester is admin
+      let requester = await userService.getUser(requestedBy);
+      if (!requester) requester = await userService.getUserByEmail(requestedBy);
+      if (!requester || requester.role !== 'ADMIN') {
+        return reply.code(403).send({ error: 'Admin role required to reset passwords' });
+      }
+      const updated = await userService.resetPassword(id, newPassword);
+      if (!updated) return reply.code(404).send({ error: 'User not found or password too short' });
+      return reply.send({ success: true, message: 'Password reset successfully' });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
   return fastify;
 }

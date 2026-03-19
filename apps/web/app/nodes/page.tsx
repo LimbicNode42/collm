@@ -392,13 +392,13 @@ export default function NodesPage() {
         ) : (
           <div className="grid gap-3">
             {filteredNodes.map(node => (
-              <div key={node.id} className="relative flex items-start group">
+              <div key={node.id} className="relative flex items-start group min-w-0">
                 <div className={`flex-shrink-0 mt-5 ml-2 mr-0 transition-opacity ${selected.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                   <input type="checkbox" aria-label={`Select ${node.topic}`} checked={selected.has(node.id)} onChange={e => { e.stopPropagation(); setSelected(prev => { const s=new Set(prev); if(s.has(node.id)) s.delete(node.id); else s.add(node.id); return s; }); }} className="w-4 h-4 rounded border-gray-300 text-indigo-600 cursor-pointer" />
                 </div>
                 <Link
                   href={`/nodes/${node.id}`}
-                  className="flex-1 block bg-white rounded-xl border shadow-sm p-5 hover:shadow-md hover:border-indigo-200 transition-all ml-2"
+                  className="flex-1 min-w-0 block bg-white rounded-xl border shadow-sm p-5 hover:shadow-md hover:border-indigo-200 transition-all ml-2"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">

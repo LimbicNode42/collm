@@ -25,8 +25,8 @@ const SERVICES: ServiceConfig[] = [
   },
   {
     name: 'user-service',
-    baseUrl: process.env.USER_SERVICE_URL || 'http://localhost:3002', 
-    pathPatterns: ['/users', '/auth', '/register', '/login']
+    baseUrl: process.env.USER_SERVICE_URL || 'http://localhost:3002',
+    pathPatterns: ['/users', '/admin', '/auth', '/register', '/login']
   }
 ];
 

@@ -5,6 +5,7 @@ import jwt from '@fastify/jwt';
 import { coreEngine } from './services/core';
 import { llmService } from './services/llm';
 import { memoryManager } from './services/memory';
+import { embeddingService } from './services/embedding';
 import { prismaCore } from '@collm/database';
 import { MessageStatus } from './types/domain';
 import { CoreService } from '@collm/contracts';
@@ -21,12 +22,12 @@ async function getUserRole(userId: string): Promise<string> {
   try {
     const emailRes = await fetch(USER_SERVICE_URL + '/users/by-email/' + encodeURIComponent(userId));
     if (emailRes.ok) {
-      const u = await emailRes.json();
+      const u = await emailRes.json() as any;
       return u.role ?? 'CONTRIBUTOR';
     }
     const idRes = await fetch(USER_SERVICE_URL + '/users/' + userId);
     if (idRes.ok) {
-      const u = await idRes.json();
+      const u = await idRes.json() as any;
       return u.role ?? 'CONTRIBUTOR';
     }
   } catch { /* non-fatal - fail open as CONTRIBUTOR */ }
@@ -318,7 +319,7 @@ fastify.post('/llm/test', async (request, reply) => {
 });
 
 fastify.post('/llm/chat', async (request, reply) => {
-  const { nodeId, message, model, userId = 'anonymous', userName } = request.body as any;
+  const { nodeId, message, model, userId = 'anonymous' } = request.body as any;
   if (!nodeId || !message) return reply.code(400).send({ error: 'nodeId and message are required' });
   try {
     const node = await coreEngine.getNode(nodeId);
@@ -347,13 +348,31 @@ fastify.post('/llm/chat', async (request, reply) => {
       data: { content: llmResponse.content, userId: 'llm', nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED }
     });
 
-    const updatedMemory = await memoryManager.addMessage(node, {
+    // Fast path: append to working memory without blocking on compression
+    const updatedMemory = await memoryManager.addMessageFast(node, {
       id: userMessage.id, content: message, userId,
       nodeId, targetNodeVersion: node.version, status: MessageStatus.ACCEPTED, createdAt: userMessage.createdAt
     }, llmResponse.content);
     const updatedNode = await coreEngine.updateNodeMemory(nodeId, updatedMemory);
 
-    if (updatedMemory.lastSummaryAt === updatedMemory.messageCount) {
+    // Background: compress memory if needed — never blocks the response
+    if (memoryManager.shouldCompress(updatedMemory)) {
+      (async () => {
+        try {
+          console.log(`[Chat] Background compression starting for node ${nodeId}`);
+          const compressedMemory = await memoryManager.compressMemory(
+            { ...node, memory: updatedMemory }, []
+          );
+          await coreEngine.updateNodeMemory(nodeId, compressedMemory);
+          console.log(`[Chat] Background compression complete for node ${nodeId}`);
+        } catch (err) {
+          console.error(`[Chat] Background compression failed for node ${nodeId}:`, err);
+        }
+      })();
+    }
+
+    // Fire meta prompt every 8 messages to refresh topic/description (non-blocking)
+    if (updatedMemory.messageCount % 8 === 0) {
       (async () => {
         try {
           const metaPrompt = `Based on this conversation summary, return a JSON object with "topic" (4-6 word title) and "description" (single sentence, max 150 chars).\n\nSUMMARY:\n${updatedMemory.workingMemory}\n\nReturn only valid JSON.`;
@@ -425,8 +444,8 @@ async function evolveLargeDocument(topic: string, model: string, currentState: s
 // POST /nodes/:id/evolve
 fastify.post('/nodes/:id/evolve', async (request, reply) => {
   const { id } = request.params as { id: string };
-  const { contribution, userId = 'anonymous', userName, sourceUrl, defer, generateDiagrams } = request.body as {
-    contribution: string; userId?: string; userName?: string; sourceUrl?: string; defer?: boolean; generateDiagrams?: boolean;
+  const { contribution, userId = 'anonymous', sourceUrl, defer, generateDiagrams } = request.body as {
+    contribution: string; userId?: string; sourceUrl?: string; defer?: boolean; generateDiagrams?: boolean;
   };
   if (!contribution?.trim()) return reply.code(400).send({ error: 'Contribution is required' });
 
@@ -615,14 +634,14 @@ async function resolveUserIds(rawIds: string[]): Promise<Map<string, string>> {
       // Try email lookup first (fast path for already-canonical ids)
       let res = await fetch(`${USER_SERVICE_URL}/users/by-email/${encodeURIComponent(rawId)}`);
       if (res.ok) {
-        const u = await res.json();
+        const u = await res.json() as any;
         map.set(rawId, u.email ?? rawId);
         return;
       }
       // Fall back: search by id or display name
       res = await fetch(`${USER_SERVICE_URL}/users/search?q=${encodeURIComponent(rawId)}`);
       if (res.ok) {
-        const u = await res.json();
+        const u = await res.json() as any;
         map.set(rawId, u.email ?? rawId);
         return;
       }
@@ -944,6 +963,12 @@ fastify.get('/nodes/user-stats/:id', async (request, reply) => {
 });
 const start = async () => {
   try {
+    // Pre-warm local embedding model at startup to avoid cold-start delay
+    // on the first compression. Runs in background — non-blocking.
+    embeddingService.initialize().catch(err => {
+      fastify.log.warn({ err }, '[Startup] Embedding model pre-warm failed (non-fatal)');
+    });
+
     await fastify.listen({ port: 3003, host: '0.0.0.0' });
   } catch (err) {
     fastify.log.error(err);

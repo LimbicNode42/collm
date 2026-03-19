@@ -3,21 +3,29 @@ import { User } from '../types/domain';
 import { hash, compare } from 'bcryptjs';
 
 export interface IUserService {
-  createUser(email: string, password: string, name?: string): Promise<User>;
+  createUser(email: string, password: string, name?: string, role?: string): Promise<User>;
   getUser(id: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
   getUserByName(name: string): Promise<User | null>;
   validateUser(email: string, password: string): Promise<User | null>;
   updateUser(id: string, updates: { name?: string }): Promise<User | null>;
   updateUserRole(id: string, role: string): Promise<User | null>;
+  resetPassword(id: string, newPassword: string): Promise<User | null>;
+  deleteUser(id: string): Promise<boolean>;
   getAllUsers(): Promise<User[]>;
 }
 
 export class UserService implements IUserService {
-  async createUser(email: string, password: string, name?: string): Promise<User> {
+  async createUser(email: string, password: string, name?: string, role?: string): Promise<User> {
+    const VALID_ROLES = ['ADMIN', 'CONTRIBUTOR', 'VIEWER'];
     const hashedPassword = await hash(password, 10);
     const user = await prismaUser.user.create({
-      data: { email, password: hashedPassword, name },
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        ...(role && VALID_ROLES.includes(role) ? { role } : {}),
+      },
     });
     const { password: _, ...userWithoutPassword } = user;
     return userWithoutPassword as User;
@@ -82,8 +90,33 @@ export class UserService implements IUserService {
     }
   }
 
+  async resetPassword(id: string, newPassword: string): Promise<User | null> {
+    if (!newPassword || newPassword.length < 8) return null;
+    try {
+      const hashedPassword = await hash(newPassword, 10);
+      const user = await prismaUser.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      });
+      const { password: _, ...userWithoutPassword } = user;
+      return userWithoutPassword as User;
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    try {
+      await prismaUser.user.delete({ where: { id } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async getAllUsers(): Promise<User[]> {
     const users = await prismaUser.user.findMany({
+      orderBy: { createdAt: 'asc' },
       select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true }
     });
     return users as User[];
