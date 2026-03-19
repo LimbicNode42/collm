@@ -191,22 +191,50 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
         {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-xl border p-4 text-center">
-              <p className="text-2xl font-bold text-indigo-600">{stats.totalContributions}</p>
-              <p className="text-xs text-gray-500 mt-1">Contributions</p>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white rounded-xl border p-4 text-center">
+                <p className="text-2xl font-bold text-indigo-600">{stats.totalContributions}</p>
+                <p className="text-xs text-gray-500 mt-1">Contributions</p>
+              </div>
+              <div className="bg-white rounded-xl border p-4 text-center">
+                <p className={`text-2xl font-bold ${stats.netVotes >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {stats.netVotes > 0 ? `+${stats.netVotes}` : stats.netVotes}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Net Votes</p>
+              </div>
+              <div className="bg-white rounded-xl border p-4 text-center">
+                <p className="text-2xl font-bold text-green-600">▲ {stats.totalUpvotes ?? 0}</p>
+                <p className="text-xs text-gray-500 mt-1">Upvotes</p>
+              </div>
+              <div className="bg-white rounded-xl border p-4 text-center">
+                <p className="text-2xl font-bold text-gray-700">{stats.topicBreakdown?.length ?? 0}</p>
+                <p className="text-xs text-gray-500 mt-1">Topics</p>
+              </div>
             </div>
-            <div className="bg-white rounded-xl border p-4 text-center">
-              <p className={`text-2xl font-bold ${stats.netVotes >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {stats.netVotes > 0 ? `+${stats.netVotes}` : stats.netVotes}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Net Votes</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-center">
-              <p className="text-2xl font-bold text-gray-700">{stats.topicBreakdown?.length ?? 0}</p>
-              <p className="text-xs text-gray-500 mt-1">Topics</p>
-            </div>
-          </div>
+
+            {/* Visual topic activity chart */}
+            {stats.topicBreakdown?.length > 0 && (
+              <div className="bg-white rounded-2xl border shadow-sm p-5">
+                <h3 className="font-semibold text-gray-800 text-sm mb-3">Topic Activity</h3>
+                <div className="space-y-2">
+                  {stats.topicBreakdown.slice(0, 6).map((t: any) => {
+                    const maxCount = stats.topicBreakdown[0].count;
+                    const pct = Math.round((t.count / maxCount) * 100);
+                    return (
+                      <div key={t.nodeId} className="flex items-center gap-3">
+                        <a href={`/nodes/${t.nodeId}`} className="text-xs text-gray-700 hover:text-indigo-600 hover:underline truncate w-36 flex-shrink-0">{t.topic}</a>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div className="bg-indigo-400 h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-500 flex-shrink-0 w-6 text-right">{t.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Topic breakdown */}

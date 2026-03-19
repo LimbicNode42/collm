@@ -15,6 +15,12 @@ export interface ILLMService {
   generateCompletion(prompt: string, systemPrompt?: string, model?: string, maxTokens?: number): Promise<LLMResponse>;
 
   /**
+   * Streams a completion token by token.
+   * Yields each text token as it arrives from the provider.
+   */
+  generateCompletionStream(prompt: string, systemPrompt?: string, model?: string, maxTokens?: number): AsyncGenerator<string>;
+
+  /**
    * Generates an embedding for the given text.
    */
   generateEmbedding(text: string): Promise<number[]>;
@@ -196,6 +202,135 @@ export class RealLLMService implements ILLMService {
     };
   }
 
+  // -------------------------------------------------------------------------
+  // Streaming helpers — one per provider
+  // -------------------------------------------------------------------------
+
+  private async *streamAnthropic(prompt: string, systemPrompt: string, model: string, maxTokens: number): AsyncGenerator<string> {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY required');
+
+    const response = await fetch(`${baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model, max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+        system: systemPrompt || undefined,
+        stream: true,
+      }),
+    });
+    if (!response.ok || !response.body) throw new Error(`Anthropic stream error: ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            yield event.delta.text;
+          }
+        } catch { /* skip malformed */ }
+      }
+    }
+  }
+
+  private async *streamOpenAI(prompt: string, systemPrompt: string, model: string, maxTokens: number): AsyncGenerator<string> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+    if (!apiKey) throw new Error('OPENAI_API_KEY required');
+
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'user', content: prompt });
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: maxTokens, stream: true }),
+    });
+    if (!response.ok || !response.body) throw new Error(`OpenAI stream error: ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          const text = event.choices?.[0]?.delta?.content;
+          if (text) yield text;
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  private async *streamGoogle(prompt: string, systemPrompt: string, model: string, maxTokens: number): AsyncGenerator<string> {
+    const apiKey = process.env.GOOGLE_API_KEY;
+    const baseUrl = process.env.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+    if (!apiKey) throw new Error('GOOGLE_API_KEY required');
+
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+
+    const response = await fetch(`${baseUrl}/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: fullPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens } }),
+    });
+    if (!response.ok || !response.body) throw new Error(`Google stream error: ${response.status}`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          const text = event.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) yield text;
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  async *generateCompletionStream(
+    prompt: string,
+    systemPrompt: string = '',
+    model: string = 'claude-sonnet-4-5-20250929',
+    maxTokens = 8192
+  ): AsyncGenerator<string> {
+    maxTokens = Math.min(maxTokens, MODEL_MAX_OUTPUT_TOKENS[model] ?? maxTokens);
+    console.log(`[LLMService] Streaming completion with model: ${model}`);
+    const provider = this.getProviderFromModel(model);
+    switch (provider) {
+      case 'anthropic': yield* this.streamAnthropic(prompt, systemPrompt, model, maxTokens); break;
+      case 'openai':    yield* this.streamOpenAI(prompt, systemPrompt, model, maxTokens); break;
+      case 'google':    yield* this.streamGoogle(prompt, systemPrompt, model, maxTokens); break;
+      default: throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
   /** Returns true for transient network errors that are worth retrying */
   private isRetryableError(error: unknown): boolean {
     if (error instanceof TypeError && error.message.includes('fetch failed')) return true;
@@ -255,8 +390,8 @@ export class RealLLMService implements ILLMService {
       }
     }
 
-    // Should never reach here, but satisfies TypeScript
-    throw lastError;
+  // Should never reach here, but satisfies TypeScript
+  throw lastError;
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
@@ -317,6 +452,23 @@ export class MockLLMService implements ILLMService {
         totalTokens: 30,
       },
     };
+  }
+
+  async *generateCompletionStream(_prompt: string, _systemPrompt?: string, _model?: string): AsyncGenerator<string> {
+    const words = [
+      '## Mock Preview\n\n',
+      'This is a **live preview** of your contribution.\n\n',
+      'In production, the AI will stream the updated document here token by token, ',
+      'so you can see the changes before saving.\n\n',
+      '### What changed\n\n',
+      '- Your contribution has been integrated\n',
+      '- The document structure has been preserved\n',
+      '- Citations and sources are noted\n',
+    ];
+    for (const word of words) {
+      yield word;
+      await new Promise(resolve => setTimeout(resolve, 40));
+    }
   }
 
   async generateEmbedding(text: string): Promise<number[]> {

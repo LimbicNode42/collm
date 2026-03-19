@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
@@ -369,6 +369,10 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [contribution, setContribution] = useState('');
   const [evolving, setEvolving] = useState(false);
   const [evolveError, setEvolveError] = useState('');
+  // Streaming preview state
+  const [streamingText, setStreamingText] = useState('');
+  const [streamDone, setStreamDone] = useState(false);
+  const [previewFinal, setPreviewFinal] = useState<string | null>(null);
 
   // Relevance checking state
   const [relevanceResult, setRelevanceResult] = useState<{score: number; recommendation: string; betterMatch: {id: string; topic: string; score: number} | null} | null>(null);
@@ -395,6 +399,10 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
   const [viewers, setViewers] = useState<string[]>([]);
   const [deferContrib, setDeferContrib] = useState(false);
   const [scoringQuality, setScoringQuality] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [factSearch, setFactSearch] = useState('');
+  const [factsLearnedCount, setFactsLearnedCount] = useState<number | null>(null);
+  const [prevFactCount, setPrevFactCount] = useState<number>(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const displayName = user?.name || user?.email || 'anonymous';
@@ -549,8 +557,12 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
     setSourceUrl('');
     setEvolveError('');
     setRelevanceResult(null);
+    setStreamingText('');
+    setStreamDone(false);
+    setPreviewFinal(null);
   }
 
+  // Step 1: Stream a preview — does NOT save yet
   async function submitContribution(e: React.FormEvent) {
     e.preventDefault();
     const text = contribution.trim();
@@ -558,6 +570,67 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
 
     setEvolving(true);
     setEvolveError('');
+    setStreamingText('');
+    setStreamDone(false);
+    setPreviewFinal(null);
+
+    try {
+      const res = await fetch(`/api/nodes/${nodeId}/evolve/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contribution: text }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error('Failed to start preview stream');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'token') {
+              setStreamingText(prev => prev + event.text);
+            } else if (event.type === 'done') {
+              setPreviewFinal(event.preview);
+              setStreamDone(true);
+            } else if (event.type === 'error') {
+              throw new Error(event.message || 'Stream error');
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message?.includes('Stream error') || parseErr.message?.includes('stream')) throw parseErr;
+          }
+        }
+      }
+    } catch (err: any) {
+      setEvolveError(err.message || 'Something went wrong');
+    } finally {
+      setEvolving(false);
+    }
+  }
+
+  // Step 2: Save confirmed preview to the database
+  async function confirmContribution() {
+    const text = contribution.trim();
+    if (!text || !previewFinal || evolving) return;
+
+    setEvolving(true);
+    setEvolveError('');
+
+    // Snapshot fact count before saving so we can detect new facts after compression
+    const factCountBefore = node?.memory?.keyFacts?.length ?? 0;
+    setPrevFactCount(factCountBefore);
+    setFactsLearnedCount(null);
 
     try {
       const res = await fetch(`/api/nodes/${nodeId}/evolve`, {
@@ -566,7 +639,6 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
         body: JSON.stringify({
           contribution: text,
           userId,
-          userName: displayName,
           sourceUrl: sourceUrl.trim() || undefined,
           defer: deferContrib,
         }),
@@ -574,16 +646,28 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.details || err.error || 'Evolution failed');
+        throw new Error(err.details || err.error || 'Save failed');
       }
 
       const data = await res.json();
-
-      // Update node state in-place
       setNode(prev => prev ? { ...prev, nodeState: data.nodeState, version: data.version } : prev);
-      // Reload contributions to include new one
       loadContributions();
       closePanel();
+
+      // Poll once after ~6s for background compression results (new key facts)
+      setTimeout(async () => {
+        try {
+          const refreshed = await fetch(`/api/nodes/${nodeId}`).then(r => r.ok ? r.json() : null);
+          if (refreshed) {
+            setNode(refreshed);
+            const newCount = refreshed.memory?.keyFacts?.length ?? 0;
+            if (newCount > factCountBefore) {
+              setFactsLearnedCount(newCount - factCountBefore);
+              setTimeout(() => setFactsLearnedCount(null), 7000);
+            }
+          }
+        } catch { /* non-fatal */ }
+      }, 6000);
     } catch (err: any) {
       setEvolveError(err.message || 'Something went wrong');
     } finally {
@@ -620,6 +704,11 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                 {node.qualityScore && (
                   <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${node.qualityScore.overall >= 8 ? 'bg-green-100 text-green-800' : node.qualityScore.overall >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
                     ⭐ {node.qualityScore.overall.toFixed(1)}/10
+                  </span>
+                )}
+                {factsLearnedCount !== null && factsLearnedCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 animate-pulse flex-shrink-0">
+                    🧠 +{factsLearnedCount} fact{factsLearnedCount !== 1 ? 's' : ''} learned
                   </span>
                 )}
               </>
@@ -669,6 +758,9 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
                         🧠 {node?.memory?.keyFacts?.length} Key Facts
                       </button>
                     )}
+                    <button onClick={() => { setShowAnalytics(v => !v); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                      📊 Analytics
+                    </button>
                     <button onClick={() => { setShowTopContributors(true); loadTopContributors(); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
                       🏆 Top Contributors
                     </button>
@@ -900,36 +992,74 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
         </>
       )}
 
-      {showFactBrowser && node && (
-        <>
-          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowFactBrowser(false)} />
-          <aside className="fixed top-0 right-0 h-full w-80 bg-white border-l shadow-2xl z-40 flex flex-col">
-            <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-800">Key Facts <span className="text-gray-400 font-normal">({node.memory?.keyFacts?.length ?? 0})</span></h2>
-              <button onClick={() => setShowFactBrowser(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
-            </div>
-            <ul className="flex-1 overflow-y-auto divide-y">
-              {(node.memory?.keyFacts ?? []).map((fact: any, i: number) => {
-                const content = typeof fact === 'string' ? fact : (fact.content ?? '');
-                const confidence = typeof fact === 'object' ? (fact.confidence ?? null) : null;
-                return (
-                  <li key={i} className="px-4 py-3">
-                    <p className="text-xs text-gray-700 leading-relaxed">{content}</p>
-                    {confidence !== null && (
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div className="bg-indigo-400 h-1.5 rounded-full" style={{width:`${Math.round(confidence*100)}%`}} />
-                        </div>
-                        <span className="text-xs text-gray-400">{Math.round(confidence*100)}%</span>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
-        </>
-      )}
+      {showFactBrowser && node && (() => {
+        const allFacts = (node.memory?.keyFacts ?? []).map((fact: any) => ({
+          content: typeof fact === 'string' ? fact : (fact.content ?? ''),
+          confidence: typeof fact === 'object' ? (fact.confidence ?? null) : null,
+        }));
+        const q = factSearch.trim().toLowerCase();
+        const filtered = q ? allFacts.filter(f => f.content.toLowerCase().includes(q)) : allFacts;
+        const highConfidence = filtered.filter(f => f.confidence === null || f.confidence >= 0.7);
+        const lowConfidence = filtered.filter(f => f.confidence !== null && f.confidence < 0.7);
+        const renderFact = (f: { content: string; confidence: number | null }, i: number, isHigh: boolean) => (
+          <li key={i} className="px-4 py-3">
+            <p className="text-xs text-gray-700 leading-relaxed">{f.content}</p>
+            {f.confidence !== null && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full ${isHigh ? 'bg-indigo-400' : 'bg-amber-400'}`} style={{width:`${Math.round(f.confidence*100)}%`}} />
+                </div>
+                <span className="text-xs text-gray-400">{Math.round(f.confidence*100)}%</span>
+              </div>
+            )}
+          </li>
+        );
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowFactBrowser(false)} />
+            <aside className="fixed top-0 right-0 h-full w-80 bg-white border-l shadow-2xl z-40 flex flex-col">
+              <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-800">Key Facts <span className="text-gray-400 font-normal">({filtered.length})</span></h2>
+                <button onClick={() => setShowFactBrowser(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+              </div>
+              <div className="flex-shrink-0 px-4 py-2 border-b bg-gray-50">
+                <input
+                  type="search"
+                  value={factSearch}
+                  onChange={e => setFactSearch(e.target.value)}
+                  placeholder="Search facts…"
+                  className="w-full text-xs text-gray-900 border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder:text-gray-400 bg-white"
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {filtered.length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-8">{q ? `No facts matching "${factSearch}"` : 'No facts yet.'}</p>
+                )}
+                {highConfidence.length > 0 && (
+                  <>
+                    <div className="px-4 pt-3 pb-1">
+                      <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">High Confidence</span>
+                    </div>
+                    <ul className="divide-y">
+                      {highConfidence.map((f, i) => renderFact(f, i, true))}
+                    </ul>
+                  </>
+                )}
+                {lowConfidence.length > 0 && (
+                  <>
+                    <div className="px-4 pt-3 pb-1 border-t">
+                      <span className="text-xs font-semibold text-amber-600 uppercase tracking-wide">Lower Confidence</span>
+                    </div>
+                    <ul className="divide-y">
+                      {lowConfidence.map((f, i) => renderFact(f, i, false))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </aside>
+          </>
+        );
+      })()}
 
 
       {showMilestones && (
@@ -1002,6 +1132,96 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {/* ── Analytics drawer ───────────────────────────────────────────── */}
+      {showAnalytics && node && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setShowAnalytics(false)} />
+          <aside className="fixed top-0 right-0 h-full w-80 bg-white border-l shadow-2xl z-40 flex flex-col">
+            <div className="flex-shrink-0 border-b px-4 py-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-800">📊 Analytics</h2>
+              <button onClick={() => setShowAnalytics(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Close">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {/* Document stats */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Document</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Words', value: node.nodeState ? node.nodeState.trim().split(/\s+/).length : 0 },
+                    { label: 'Sections', value: node.nodeState ? (node.nodeState.match(/^#{1,3} /gm) ?? []).length : 0 },
+                    { label: 'Version', value: node.version ?? 0 },
+                    { label: 'Key Facts', value: node.memory?.keyFacts?.length ?? 0 },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-gray-800">{value}</p>
+                      <p className="text-xs text-gray-500">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Quality breakdown */}
+              {node.qualityScore && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quality Score</h3>
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Overall', value: node.qualityScore.overall },
+                      { label: 'Accuracy', value: node.qualityScore.accuracy },
+                      { label: 'Completeness', value: node.qualityScore.completeness },
+                      { label: 'Neutrality', value: node.qualityScore.neutrality },
+                      { label: 'Citations', value: node.qualityScore.citations },
+                    ].filter(d => d.value != null).map(({ label, value }) => (
+                      <div key={label}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-gray-600">{label}</span>
+                          <span className="font-medium text-gray-800">{value?.toFixed(1)}/10</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div className={`h-1.5 rounded-full ${(value ?? 0) >= 8 ? 'bg-green-500' : (value ?? 0) >= 5 ? 'bg-amber-500' : 'bg-red-500'}`}
+                            style={{ width: `${((value ?? 0) / 10) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Contribution stats */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contributions</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Total', value: contributions.length },
+                    { label: 'Contributors', value: new Set(contributions.map(c => c.userId)).size },
+                    { label: 'Avg length', value: contributions.length > 0 ? Math.round(contributions.reduce((s, c) => s + c.content.length, 0) / contributions.length) : 0 },
+                    { label: 'Net upvotes', value: contributions.reduce((s, c) => s + (c.upvotes ?? 0) - (c.downvotes ?? 0), 0) },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-gray-800">{value}</p>
+                      <p className="text-xs text-gray-500">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Memory stats */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Memory</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Working mem', value: node.memory?.workingMemory ? Math.round(node.memory.workingMemory.length / 4) + ' tkn' : '—' },
+                    { label: 'Key facts', value: node.memory?.keyFacts?.length ?? 0 },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 rounded-lg p-3 text-center">
+                      <p className="text-lg font-bold text-gray-800">{value}</p>
+                      <p className="text-xs text-gray-500">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
+
       {selectedContribution && node && (() => {
 
         const chronIdx = contributions.findIndex(c => c.id === selectedContribution.id);
@@ -1041,102 +1261,137 @@ export default function NodeDocumentPage({ params }: { params: Promise<{ id: str
               Paste research, facts, corrections, or insights — the AI will integrate them into the document.
             </p>
 
-            <form onSubmit={submitContribution} className="space-y-3">
-              <div className="flex flex-wrap gap-1.5 mb-1">
-                {TEMPLATES.map(t => (
-                  <button key={t.label} type="button" onClick={() => { setContribution(t.text); setTimeout(() => textareaRef.current?.focus(), 0); }}
-                    className="px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors border border-gray-200 font-medium">
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <textarea
-                ref={textareaRef}
-                value={contribution}
-                onChange={e => setContribution(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') closePanel();
-                }}
-                placeholder="e.g. Recent studies have shown that… / Correction: the figure is actually… / Key fact: …"
-                rows={5}
-                disabled={evolving}
-                className="w-full border rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 resize-none placeholder:text-gray-400"
-              />
+            {/* ── Input form (hidden once streaming starts) ─────────── */}
+            {!streamDone && !streamingText && (
+              <form onSubmit={submitContribution} className="space-y-3">
+                <div className="flex flex-wrap gap-1.5 mb-1">
+                  {TEMPLATES.map(t => (
+                    <button key={t.label} type="button" onClick={() => { setContribution(t.text); setTimeout(() => textareaRef.current?.focus(), 0); }}
+                      className="px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors border border-gray-200 font-medium">
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  ref={textareaRef}
+                  value={contribution}
+                  onChange={e => setContribution(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') closePanel(); }}
+                  placeholder="e.g. Recent studies have shown that… / Correction: the figure is actually… / Key fact: …"
+                  rows={5}
+                  disabled={evolving}
+                  className="w-full border rounded-xl px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 resize-none placeholder:text-gray-400"
+                />
+                {checkingRelevance && (
+                  <p className="text-xs text-gray-400 animate-pulse">Checking relevance…</p>
+                )}
+                {!checkingRelevance && relevanceResult && (
+                  <div className={`text-xs px-3 py-2 rounded-lg ${relevanceResult.recommendation === 'highly_relevant' ? 'bg-green-50 text-green-700' : relevanceResult.recommendation === 'relevant' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {relevanceResult.recommendation === 'highly_relevant' && '✓ Highly relevant to this topic'}
+                    {relevanceResult.recommendation === 'relevant' && '✓ Relevant to this topic'}
+                    {relevanceResult.recommendation === 'off_topic' && (
+                      <span>
+                        ⚠️ This may not be relevant to <strong>{node?.topic}</strong>
+                        {relevanceResult.betterMatch && (
+                          <> — it might fit better in{' '}
+                            <button onClick={() => { closePanel(); router.push(`/nodes/${relevanceResult.betterMatch!.id}`); }} className="underline font-medium hover:no-underline">
+                              {relevanceResult.betterMatch.topic}
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <input
+                  type="url"
+                  value={sourceUrl}
+                  onChange={e => setSourceUrl(e.target.value)}
+                  placeholder="Source URL (optional) — e.g. https://example.com/study"
+                  disabled={evolving}
+                  className="w-full border rounded-xl px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 placeholder:text-gray-400"
+                />
+                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" checked={deferContrib} onChange={e => setDeferContrib(e.target.checked)} disabled={evolving} className="rounded" />
+                  Defer (add to moderation queue)
+                </label>
+                {evolveError && <p className="text-sm text-red-600">{evolveError}</p>}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Contributing as <strong>{displayName}</strong></span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={closePanel} disabled={evolving} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50">
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={evolving || !contribution.trim()}
+                      className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      {evolving ? (
+                        <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Generating preview…</>
+                      ) : 'Preview contribution →'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
 
-              {checkingRelevance && (
-                <p className="text-xs text-gray-400 animate-pulse">Checking relevance…</p>
-              )}
-              {!checkingRelevance && relevanceResult && (
-                <div className={`text-xs px-3 py-2 rounded-lg ${relevanceResult.recommendation === 'highly_relevant' ? 'bg-green-50 text-green-700' : relevanceResult.recommendation === 'relevant' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {relevanceResult.recommendation === 'highly_relevant' && '✓ Highly relevant to this topic'}
-                  {relevanceResult.recommendation === 'relevant' && '✓ Relevant to this topic'}
-                  {relevanceResult.recommendation === 'off_topic' && (
-                    <span>
-                      ⚠️ This may not be relevant to <strong>{node?.topic}</strong>
-                      {relevanceResult.betterMatch && (
-                        <> — it might fit better in{' '}
-                          <button onClick={() => { closePanel(); router.push(`/nodes/${relevanceResult.betterMatch!.id}`); }} className="underline font-medium hover:no-underline">
-                            {relevanceResult.betterMatch.topic}
-                          </button>
-                        </>
-                      )}
-                    </span>
+            {/* ── Live streaming preview ──────────────────────────────── */}
+            {(streamingText || streamDone) && (
+              <div className="space-y-3">
+                {/* Status bar */}
+                <div className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${streamDone ? 'bg-green-50 text-green-700' : 'bg-indigo-50 text-indigo-700'}`}>
+                  {streamDone ? (
+                    <><span className="text-base">✅</span> Preview ready — review the updated document below</>
+                  ) : (
+                    <><span className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin flex-shrink-0" /> Generating preview…</>
                   )}
                 </div>
-              )}
 
-              <input
-                type="url"
-                value={sourceUrl}
-                onChange={e => setSourceUrl(e.target.value)}
-                placeholder="Source URL (optional) — e.g. https://example.com/study"
-                disabled={evolving}
-                className="w-full border rounded-xl px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 placeholder:text-gray-400"
-              />
+                {/* Live markdown preview */}
+                <div className="border rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 border-b px-4 py-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Document Preview</span>
+                    {!streamDone && (
+                      <span className="text-xs text-gray-400 animate-pulse">Streaming…</span>
+                    )}
+                  </div>
+                  <div className="max-h-72 overflow-y-auto px-4 py-4 prose prose-sm prose-gray max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {streamingText || ''}
+                    </ReactMarkdown>
+                    {!streamDone && <span className="inline-block w-1 h-4 bg-indigo-500 animate-pulse ml-0.5 align-text-bottom" />}
+                  </div>
+                </div>
 
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={deferContrib}
-                  onChange={e => setDeferContrib(e.target.checked)}
-                  disabled={evolving}
-                  className="rounded"
-                />
-                Defer (add to moderation queue)
-              </label>
+                {evolveError && <p className="text-sm text-red-600">{evolveError}</p>}
 
-              {evolveError && (
-                <p className="text-sm text-red-600">{evolveError}</p>
-              )}
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">
-                  Contributing as <strong>{displayName}</strong>
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={closePanel}
-                    disabled={evolving}
-                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={evolving || !contribution.trim()}
-                    className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center gap-2"
-                  >
-                    {evolving ? (
-                      <>
-                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        Evolving document…
-                      </>
-                    ) : 'Submit contribution →'}
-                  </button>
+                {/* Action buttons */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Contributing as <strong>{displayName}</strong></span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setStreamingText(''); setStreamDone(false); setPreviewFinal(null); setEvolveError(''); }}
+                      disabled={evolving}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-xl disabled:opacity-50 transition-colors"
+                    >
+                      ← Revise
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmContribution}
+                      disabled={!streamDone || evolving}
+                      className="bg-green-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                    >
+                      {evolving ? (
+                        <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
+                      ) : 'Looks good — save →'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </form>
+            )}
           </div>
         </>
       )}

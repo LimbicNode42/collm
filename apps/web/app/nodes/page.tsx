@@ -402,11 +402,16 @@ export default function NodesPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center flex-wrap gap-2 mb-1">
+                  <div className="flex items-center flex-wrap gap-2 mb-1">
                       <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700 truncate">
                         {node.topic}
                       </h3>
                       <ModelBadge model={node.model} />
+                      {(node as any).qualityScore?.overall != null && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${(node as any).qualityScore.overall >= 8 ? 'bg-green-100 text-green-800' : (node as any).qualityScore.overall >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                          ⭐ {(node as any).qualityScore.overall}/10
+                        </span>
+                      )}
                     </div>
                     {node.description && (
                       <p className="text-sm text-gray-500 truncate mb-2">{node.description}</p>
@@ -419,7 +424,12 @@ export default function NodesPage() {
                     )}
                     <div className="flex items-center gap-4 text-xs text-gray-400">
                       <span>{node.memory?.messageCount ?? 0} AI turns</span>
-                      <span>{node.memory?.keyFacts?.length ?? 0} facts</span>
+                      {(node.memory?.keyFacts?.length ?? 0) > 0 && (
+                        <span>🧠 {node.memory?.keyFacts?.length} facts</span>
+                      )}
+                      {(node as any).nodeState && (
+                        <span>{((node as any).nodeState as string).split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
+                      )}
                       <span>v{node.version}</span>
                       <span>
                         {new Date(node.updatedAt).toLocaleDateString('en-AU', {

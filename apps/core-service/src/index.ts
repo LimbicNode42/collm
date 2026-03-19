@@ -178,6 +178,7 @@ fastify.get<{
         lastSummaryAt: node.lastSummaryAt ? new Date(node.lastSummaryAt).toISOString() : null,
       },
       nodeState: node.nodeState || '',
+      qualityScore: (node as any).qualityScore ?? null,
       version: node.version,
       createdAt: node.createdAt.toISOString(), updatedAt: node.updatedAt.toISOString(),
     }));
@@ -504,6 +505,72 @@ fastify.post('/nodes/:id/evolve', async (request, reply) => {
   } catch (error) {
     request.log.error({ err: error }, 'Evolve error');
     return reply.code(500).send({ error: 'Failed to evolve document', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /nodes/:id/evolve/stream — preview only, SSE stream, does NOT save
+// ---------------------------------------------------------------------------
+fastify.post('/nodes/:id/evolve/stream', async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const { contribution, generateDiagrams } = request.body as {
+    contribution: string; generateDiagrams?: boolean;
+  };
+  if (!contribution?.trim()) return reply.code(400).send({ error: 'Contribution is required' });
+
+  try {
+    const dbNode = await prismaCore.node.findUnique({ where: { id } });
+    if (!dbNode) return reply.code(404).send({ error: 'Node not found' });
+
+    const safeContribution = contribution.length > MAX_CONTRIBUTION_CHARS
+      ? contribution.slice(0, MAX_CONTRIBUTION_CHARS) + '\n\n[Truncated]'
+      : contribution;
+
+    const currentState = dbNode.nodeState || '';
+
+    let prompt: string;
+    let systemPrompt: string;
+
+    if (!currentState) {
+      systemPrompt = `You are creating a concise knowledge document in the style of Wikipedia or StackExchange. Based on the topic and initial contribution, produce a well-structured document in markdown.\n\nGuidelines:\n- Encyclopedic, accurate, neutral point-of-view\n- Prefer quantitative data: include specific statistics, percentages, figures, dates, and measurements wherever the contribution provides them\n- Cite sources inline using [Source: Author/Publication, Year] or [Source: URL] notation when the contributor references them\n- Structure with clear ## sections (e.g. ## Overview, ## Key Statistics, ## Details)\n- Be concise — 400-600 words for the initial document`;
+      prompt = `TOPIC: ${dbNode.topic}\n${dbNode.description ? `DESCRIPTION: ${dbNode.description}\n` : ''}\nINITIAL CONTRIBUTION:\n${safeContribution}\n\nDocument:`;
+    } else {
+      systemPrompt = `You maintain a knowledge document about "${dbNode.topic}" in the style of Wikipedia or StackExchange. Integrate the contribution naturally — expand detail, resolve contradictions, improve clarity.\n\nGuidelines:\n- Prefer quantitative data over vague claims: replace or supplement general statements with specific numbers, percentages, figures, or dates from the contribution\n- Cite sources inline using [Source: Author/Publication, Year] when the contributor provides them\n- Neutral, encyclopedic tone — present multiple perspectives for contested claims\n- Return the COMPLETE updated document in markdown\n- Keep it under 600 words unless the topic genuinely demands more depth${generateDiagrams ? '\n- Where relevant, include Mermaid.js diagrams using ```mermaid blocks for processes, architectures, or relationships' : ''}`;
+      prompt = `CURRENT DOCUMENT:\n${currentState}\n\n---\nNEW CONTRIBUTION:\n${safeContribution}\n\nReturn the complete updated document:`;
+    }
+
+    // Set SSE headers via raw response
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const sendEvent = (data: object) => {
+      reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const tokenStream = llmService.generateCompletionStream(prompt, systemPrompt, dbNode.model, 2048);
+      let fullText = '';
+      for await (const token of tokenStream) {
+        fullText += token;
+        sendEvent({ type: 'token', text: token });
+      }
+      const cleaned = fullText.replace(/^```(?:markdown)?\s*/i, '').replace(/\s*```$/, '').trim();
+      sendEvent({ type: 'done', preview: cleaned });
+    } catch (streamErr) {
+      sendEvent({ type: 'error', message: streamErr instanceof Error ? streamErr.message : 'Stream failed' });
+    }
+
+    reply.raw.end();
+  } catch (error) {
+    request.log.error({ err: error }, 'Evolve stream error');
+    if (!reply.raw.headersSent) {
+      return reply.code(500).send({ error: 'Failed to start stream' });
+    }
+    reply.raw.end();
   }
 });
 
